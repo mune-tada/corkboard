@@ -1,5 +1,5 @@
 import { initMessageHandler } from './messageHandler';
-import { initCorkboard, loadCorkboard, addCard, handleFileChanged, handleFileDeleted } from './corkboard';
+import { initCorkboard, loadCorkboard, addCard, handleFileChanged, handleFileDeleted, handleFileRenamed } from './corkboard';
 
 // VSCode API初期化
 const vscodeApi = initMessageHandler();
@@ -25,6 +25,9 @@ window.addEventListener('message', (event) => {
       break;
     case 'fileDeleted':
       handleFileDeleted(message.filePath);
+      break;
+    case 'fileRenamed':
+      handleFileRenamed(message.cardId, message.oldPath, message.newPath);
       break;
   }
 });

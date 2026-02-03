@@ -1,5 +1,5 @@
 import { CorkboardConfig, CardData, FilePreview, LabelDefinition } from './types';
-import { createCardElement, getSynopsisText } from './cardRenderer';
+import { createCardElement, getSynopsisText, applyLabelColorVars, removeLabelColorVars } from './cardRenderer';
 import { initGridMode, destroyGridMode, updateCardNumbers } from './gridMode';
 import { initFreeformMode, destroyFreeformMode, commitFreeformOrder } from './freeformMode';
 import {
@@ -10,6 +10,7 @@ import {
   sendRemoveCard,
   sendUpdateCard,
   sendUpdateSynopsis,
+  sendRenameFile,
 } from './messageHandler';
 
 let currentConfig: CorkboardConfig | null = null;
@@ -87,9 +88,16 @@ function renderCards(): void {
       selectedCardId = card.id;
     });
 
-    // カードダブルクリック（概要エリアでファイルを開く）
-    cardEl.querySelector('.card-synopsis')?.addEventListener('dblclick', () => {
-      openFile(card.filePath);
+    // 概要ダブルクリック → インライン編集
+    cardEl.querySelector('.card-synopsis')?.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      editSynopsis(card, cardEl);
+    });
+
+    // タイトルダブルクリック → ファイル名リネーム
+    cardEl.querySelector('.card-title')?.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      editTitle(card, cardEl);
     });
 
     // メニューボタン
@@ -252,8 +260,7 @@ function showLabelPicker(card: CardData, cardEl: HTMLElement): void {
   noneItem.addEventListener('click', () => {
     card.label = null;
     sendUpdateCard(card.id, { label: null });
-    cardEl.style.removeProperty('--label-color');
-    cardEl.classList.remove('has-label');
+    removeLabelColorVars(cardEl);
     picker.remove();
   });
   picker.appendChild(noneItem);
@@ -265,8 +272,7 @@ function showLabelPicker(card: CardData, cardEl: HTMLElement): void {
     item.addEventListener('click', () => {
       card.label = labelDef.name;
       sendUpdateCard(card.id, { label: labelDef.name });
-      cardEl.style.setProperty('--label-color', labelDef.color);
-      cardEl.classList.add('has-label');
+      applyLabelColorVars(cardEl, labelDef.color);
       picker.remove();
     });
     picker.appendChild(item);
@@ -401,6 +407,59 @@ function editSynopsis(card: CardData, cardEl: HTMLElement): void {
   });
 }
 
+/** タイトル（ファイル名）のインライン編集 */
+function editTitle(card: CardData, cardEl: HTMLElement): void {
+  const titleEl = cardEl.querySelector('.card-title') as HTMLElement;
+  if (!titleEl) return;
+
+  const fullName = card.filePath.split('/').pop() || card.filePath;
+  const dotIndex = fullName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? fullName.substring(0, dotIndex) : fullName;
+
+  const input = document.createElement('input');
+  input.className = 'title-edit';
+  input.type = 'text';
+  input.value = baseName;
+
+  const originalText = titleEl.textContent || '';
+  titleEl.textContent = '';
+  titleEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  let finished = false;
+  const finishEdit = () => {
+    if (finished) return;
+    finished = true;
+    const newValue = input.value.trim();
+    if (newValue && newValue !== baseName) {
+      sendRenameFile(card.id, card.filePath, newValue);
+      // タイトルは fileRenamed メッセージ受信時に更新される
+      titleEl.textContent = newValue + (dotIndex > 0 ? fullName.substring(dotIndex) : '');
+    } else {
+      titleEl.textContent = originalText;
+    }
+  };
+
+  const cancelEdit = () => {
+    if (finished) return;
+    finished = true;
+    titleEl.textContent = originalText;
+  };
+
+  input.addEventListener('blur', finishEdit);
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      input.removeEventListener('blur', finishEdit);
+      finishEdit();
+    } else if (e.key === 'Escape') {
+      input.removeEventListener('blur', finishEdit);
+      cancelEdit();
+    }
+  });
+}
+
 /** カードを削除 */
 function removeCard(card: CardData, cardEl: HTMLElement): void {
   sendRemoveCard(card.id);
@@ -453,6 +512,35 @@ export function handleFileDeleted(filePath: string): void {
     const synopsis = cardEl.querySelector('.card-synopsis');
     if (synopsis) {
       synopsis.textContent = '⚠ ファイルが削除されました';
+    }
+  }
+}
+
+/** ファイルリネーム完了時のハンドラ */
+export function handleFileRenamed(cardId: string, oldPath: string, newPath: string): void {
+  if (!currentConfig) return;
+  const card = currentConfig.cards.find(c => c.id === cardId);
+  if (!card) return;
+
+  // filePreviews を更新
+  const preview = filePreviews.get(oldPath);
+  if (preview) {
+    filePreviews.delete(oldPath);
+    preview.filePath = newPath;
+    filePreviews.set(newPath, preview);
+  }
+
+  card.filePath = newPath;
+
+  // DOM更新
+  const container = document.getElementById('corkboard-container')!;
+  const cardEl = container.querySelector<HTMLElement>(`[data-id="${cardId}"]`);
+  if (cardEl) {
+    const titleEl = cardEl.querySelector('.card-title');
+    if (titleEl) {
+      const newName = newPath.split('/').pop() || newPath;
+      titleEl.textContent = newName;
+      titleEl.setAttribute('title', newPath);
     }
   }
 }

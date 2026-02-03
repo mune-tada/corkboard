@@ -29,8 +29,7 @@ export function createCardElement(
   // ラベル色の設定
   const labelDef = card.label ? labelColors.find(l => l.name === card.label) : null;
   if (labelDef) {
-    el.style.setProperty('--label-color', labelDef.color);
-    el.classList.add('has-label');
+    applyLabelColorVars(el, labelDef.color);
   }
 
   const synopsis = getSynopsisText(card, preview);
@@ -99,12 +98,36 @@ export function updateCardStatus(cardEl: HTMLElement, status: string | null): vo
 /** カードのラベル色を更新 */
 export function updateCardLabel(cardEl: HTMLElement, labelColor: string | null): void {
   if (labelColor) {
-    cardEl.style.setProperty('--label-color', labelColor);
-    cardEl.classList.add('has-label');
+    applyLabelColorVars(cardEl, labelColor);
   } else {
-    cardEl.style.removeProperty('--label-color');
-    cardEl.classList.remove('has-label');
+    removeLabelColorVars(cardEl);
   }
+}
+
+/** hex色をrgbaに変換 */
+export function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** カードにラベル色のCSS変数を一括設定 */
+export function applyLabelColorVars(el: HTMLElement, color: string): void {
+  el.style.setProperty('--label-color', color);
+  el.style.setProperty('--label-color-bg', hexToRgba(color, 0.15));
+  el.style.setProperty('--label-color-border', hexToRgba(color, 0.3));
+  el.style.setProperty('--label-color-header', hexToRgba(color, 0.1));
+  el.classList.add('has-label');
+}
+
+/** カードからラベル色のCSS変数を一括除去 */
+export function removeLabelColorVars(el: HTMLElement): void {
+  el.style.removeProperty('--label-color');
+  el.style.removeProperty('--label-color-bg');
+  el.style.removeProperty('--label-color-border');
+  el.style.removeProperty('--label-color-header');
+  el.classList.remove('has-label');
 }
 
 /** HTMLエスケープ */

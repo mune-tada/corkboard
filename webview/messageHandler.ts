@@ -63,3 +63,8 @@ export function requestFilePicker(): void {
 export function sendSetGridColumns(columns: number): void {
   postMessage({ command: 'setGridColumns', columns });
 }
+
+/** ファイルリネーム */
+export function sendRenameFile(cardId: string, oldPath: string, newFileName: string): void {
+  postMessage({ command: 'renameFile', cardId, oldPath, newFileName });
+}

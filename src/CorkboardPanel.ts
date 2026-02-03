@@ -132,6 +132,9 @@ export class CorkboardPanel {
       case 'setGridColumns':
         this.dataManager.setGridColumns(msg.columns);
         break;
+      case 'renameFile':
+        await this.handleRenameFile(msg.cardId, msg.oldPath, msg.newFileName);
+        break;
     }
   }
 
@@ -216,6 +219,30 @@ export class CorkboardPanel {
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
+  }
+
+  /** ファイルリネーム処理 */
+  private async handleRenameFile(cardId: string, oldPath: string, newFileName: string): Promise<void> {
+    try {
+      const oldUri = vscode.Uri.file(path.join(this.workspaceRoot, oldPath));
+      const dir = path.dirname(oldPath);
+      const ext = path.extname(oldPath);
+      const newBaseName = newFileName.includes('.') ? newFileName : newFileName + ext;
+      const newPath = dir === '.' ? newBaseName : path.join(dir, newBaseName);
+      const newUri = vscode.Uri.file(path.join(this.workspaceRoot, newPath));
+
+      await vscode.workspace.fs.rename(oldUri, newUri);
+      this.dataManager.updateCard(cardId, { filePath: newPath });
+      this.panel.webview.postMessage({
+        command: 'fileRenamed',
+        cardId,
+        oldPath,
+        newPath,
+      });
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      vscode.window.showErrorMessage(`ファイル名の変更に失敗しました: ${errorMsg}`);
+    }
   }
 
   /** ワークスペースファイルの変更・削除を監視 */

@@ -33,6 +33,13 @@
 
 .card.has-label .card-label-stripe {
   opacity: 1;
+  width: 5px;
+}
+
+/* ラベル色をカード全体に反映 */
+.card.has-label {
+  background: var(--label-color-bg, var(--vscode-editorWidget-background));
+  border-color: var(--label-color-border, var(--vscode-editorWidget-border, var(--vscode-panel-border)));
 }
 
 /* カードヘッダー */
@@ -53,6 +60,7 @@
 
 .card.has-label .card-header {
   padding-left: 16px;
+  background: var(--label-color-header, var(--vscode-sideBarSectionHeader-background, transparent));
 }
 
 .card-number {
@@ -120,22 +128,36 @@
   color: var(--vscode-foreground);
 }
 
-/* 概要編集テキストエリア */
+/* 概要編集テキストエリア（カードに溶け込むスタイル） */
 .synopsis-edit {
   width: 100%;
   min-height: 60px;
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-  border-radius: 3px;
-  padding: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  border: none;
+  padding: 0;
   font-size: 11px;
+  line-height: 1.5;
   font-family: var(--vscode-font-family);
-  resize: vertical;
+  resize: none;
+  outline: none;
 }
 
 .synopsis-edit:focus {
-  outline: 1px solid var(--vscode-focusBorder);
+  outline: none;
+}
+
+/* タイトル編集インプット */
+.title-edit {
+  border: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  outline: none;
+  font-weight: 600;
+  font-size: 12px;
+  width: 100%;
+  padding: 0;
+  font-family: var(--vscode-font-family);
 }
 
 /* カードフッター */

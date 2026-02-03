@@ -6,6 +6,18 @@ let dragOffsetX = 0;
 let dragOffsetY = 0;
 let highestZ = 100;
 
+// パフォーマンス最適化用キャッシュ
+let cachedContainerRect: DOMRect | null = null;
+let cachedScrollLeft = 0;
+let cachedScrollTop = 0;
+let startLeft = 0;
+let startTop = 0;
+let pendingX = 0;
+let pendingY = 0;
+let rafId = 0;
+let dragContainer: HTMLElement | null = null;
+let scrollHandler: (() => void) | null = null;
+
 /** フリーフォームモードを初期化 */
 export function initFreeformMode(container: HTMLElement): void {
   container.classList.remove('grid-mode');
@@ -59,9 +71,24 @@ function onMouseDown(e: MouseEvent): void {
   const card = header.closest<HTMLElement>('.card');
   if (!card) return;
 
+  const container = card.parentElement;
+  if (!container) return;
+
   e.preventDefault();
   isDragging = true;
   dragTarget = card;
+  dragContainer = container;
+
+  // containerRectをキャッシュ（mousemoveで毎回計算しない）
+  cachedContainerRect = container.getBoundingClientRect();
+  cachedScrollLeft = container.scrollLeft;
+  cachedScrollTop = container.scrollTop;
+
+  // 開始位置を記録
+  startLeft = parseFloat(card.style.left || '0');
+  startTop = parseFloat(card.style.top || '0');
+  pendingX = startLeft;
+  pendingY = startTop;
 
   const rect = card.getBoundingClientRect();
   dragOffsetX = e.clientX - rect.left;
@@ -71,42 +98,72 @@ function onMouseDown(e: MouseEvent): void {
   highestZ++;
   card.style.zIndex = String(highestZ);
   card.classList.add('card-dragging');
+
+  // ドラッグ中のスクロール対応
+  scrollHandler = () => {
+    cachedScrollLeft = container.scrollLeft;
+    cachedScrollTop = container.scrollTop;
+  };
+  container.addEventListener('scroll', scrollHandler);
 }
 
 function onMouseMove(e: MouseEvent): void {
-  if (!isDragging || !dragTarget) return;
+  if (!isDragging || !dragTarget || !cachedContainerRect) return;
 
-  const container = dragTarget.parentElement;
-  if (!container) return;
+  // rAFで1フレームに1回だけDOM更新
+  if (rafId) return;
 
-  const containerRect = container.getBoundingClientRect();
-  const x = e.clientX - containerRect.left - dragOffsetX + container.scrollLeft;
-  const y = e.clientY - containerRect.top - dragOffsetY + container.scrollTop;
+  rafId = requestAnimationFrame(() => {
+    rafId = 0;
+    if (!isDragging || !dragTarget || !cachedContainerRect) return;
 
-  const clampedX = Math.max(0, x);
-  const clampedY = Math.max(0, y);
+    const x = e.clientX - cachedContainerRect.left - dragOffsetX + cachedScrollLeft;
+    const y = e.clientY - cachedContainerRect.top - dragOffsetY + cachedScrollTop;
 
-  dragTarget.style.left = `${clampedX}px`;
-  dragTarget.style.top = `${clampedY}px`;
-  dragTarget.dataset.posX = String(clampedX);
-  dragTarget.dataset.posY = String(clampedY);
+    pendingX = Math.max(0, x);
+    pendingY = Math.max(0, y);
+
+    // ドラッグ中はtransformで移動（GPUコンポジット、レイアウト再計算なし）
+    const dx = pendingX - startLeft;
+    const dy = pendingY - startTop;
+    dragTarget.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
 }
 
 function onMouseUp(_e: MouseEvent): void {
   if (!isDragging || !dragTarget) return;
 
+  // 保留中のrAFをキャンセル
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+
+  // transformをクリアし、最終位置をleft/topに確定
+  dragTarget.style.transform = '';
+  dragTarget.style.left = `${pendingX}px`;
+  dragTarget.style.top = `${pendingY}px`;
+  dragTarget.dataset.posX = String(pendingX);
+  dragTarget.dataset.posY = String(pendingY);
+
   dragTarget.classList.remove('card-dragging');
 
   // 位置をExtensionに送信
   const cardId = dragTarget.dataset.id;
-  const x = parseFloat(dragTarget.dataset.posX || '0');
-  const y = parseFloat(dragTarget.dataset.posY || '0');
   if (cardId) {
-    sendMoveCard(cardId, x, y);
+    sendMoveCard(cardId, pendingX, pendingY);
+  }
+
+  // スクロールリスナーを除去
+  if (dragContainer && scrollHandler) {
+    dragContainer.removeEventListener('scroll', scrollHandler);
   }
 
   isDragging = false;
   dragTarget = null;
+  dragContainer = null;
+  cachedContainerRect = null;
+  scrollHandler = null;
 }
 
 /** フリーフォームモードを破棄 */
@@ -114,6 +171,20 @@ export function destroyFreeformMode(container: HTMLElement): void {
   container.removeEventListener('mousedown', onMouseDown);
   document.removeEventListener('mousemove', onMouseMove);
   document.removeEventListener('mouseup', onMouseUp);
+
+  // ドラッグ中に破棄された場合のクリーンアップ
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+  if (dragContainer && scrollHandler) {
+    dragContainer.removeEventListener('scroll', scrollHandler);
+  }
+  isDragging = false;
+  dragTarget = null;
+  dragContainer = null;
+  cachedContainerRect = null;
+  scrollHandler = null;
 }
 
 /** 現在の配置から左上→右下の順序でカードIDを返す */

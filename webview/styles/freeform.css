@@ -15,4 +15,10 @@
   position: absolute;
   width: 220px;
   min-height: 150px;
+  will-change: transform;
+}
+
+#corkboard-container.freeform-mode .card.card-dragging {
+  will-change: transform;
+  pointer-events: none;
 }

@@ -39,7 +39,8 @@ export type ExtensionToWebviewMessage =
   | { command: 'cardAdded'; card: CardData; preview: FilePreview }
   | { command: 'fileChanged'; filePath: string; preview: FilePreview }
   | { command: 'fileDeleted'; filePath: string }
-  | { command: 'configReloaded'; data: CorkboardConfig; filePreviews: FilePreview[] };
+  | { command: 'configReloaded'; data: CorkboardConfig; filePreviews: FilePreview[] }
+  | { command: 'fileRenamed'; cardId: string; oldPath: string; newPath: string };
 
 /** Webview → Extension メッセージ */
 export type WebviewToExtensionMessage =
@@ -52,7 +53,8 @@ export type WebviewToExtensionMessage =
   | { command: 'commitFreeformOrder'; cardIds: string[] }
   | { command: 'updateSynopsis'; cardId: string; synopsis: string }
   | { command: 'requestFilePicker' }
-  | { command: 'setGridColumns'; columns: number };
+  | { command: 'setGridColumns'; columns: number }
+  | { command: 'renameFile'; cardId: string; oldPath: string; newFileName: string };
 
 /** デフォルト設定 */
 export function createDefaultConfig(): CorkboardConfig {
