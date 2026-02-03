@@ -39,4 +39,12 @@ export class FileScanner {
     const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**', 500);
     return uris.map(uri => path.relative(this.workspaceRoot, uri.fsPath));
   }
+
+  /** 指定フォルダ内の対象ファイルを一覧取得 */
+  async listEligibleFilesInFolder(folderRelPath: string): Promise<string[]> {
+    const fileGlob = vscode.workspace.getConfiguration('corkboard').get<string>('fileGlob', '**/*.{md,txt}');
+    const scopedGlob = folderRelPath ? `${folderRelPath}/${fileGlob}` : fileGlob;
+    const uris = await vscode.workspace.findFiles(scopedGlob, '**/node_modules/**', 500);
+    return uris.map(uri => path.relative(this.workspaceRoot, uri.fsPath));
+  }
 }

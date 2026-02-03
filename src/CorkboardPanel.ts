@@ -139,6 +139,22 @@ export class CorkboardPanel {
   }
 
   private async showFilePicker(): Promise<void> {
+    // ファイル追加方法を選択
+    const choice = await vscode.window.showQuickPick([
+      { label: '📄 ファイルを選択', description: '個別のファイルを選ぶ', value: 'file' as const },
+      { label: '📁 フォルダを選択', description: 'フォルダ内のすべての対象ファイルを追加', value: 'folder' as const },
+    ], { placeHolder: '追加方法を選択' });
+
+    if (!choice) return;
+
+    if (choice.value === 'folder') {
+      await this.showFolderPicker();
+    } else {
+      await this.showIndividualFilePicker();
+    }
+  }
+
+  private async showIndividualFilePicker(): Promise<void> {
     const eligible = await this.fileScanner.listEligibleFiles();
     const config = this.dataManager.getConfig();
     const existingPaths = new Set(config.cards.map(c => c.filePath));
@@ -161,15 +177,45 @@ export class CorkboardPanel {
     });
 
     if (selected) {
-      for (const item of selected) {
-        const card = this.dataManager.addCard(item.filePath);
-        const preview = await this.fileScanner.getFilePreview(item.filePath);
-        this.panel.webview.postMessage({
-          command: 'cardAdded',
-          card,
-          preview,
-        });
-      }
+      await this.addFilesToBoard(selected.map(s => s.filePath));
+    }
+  }
+
+  private async showFolderPicker(): Promise<void> {
+    const folderUris = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      defaultUri: vscode.Uri.file(this.workspaceRoot),
+      openLabel: 'フォルダを追加',
+    });
+
+    if (!folderUris || folderUris.length === 0) return;
+
+    const folderRelative = path.relative(this.workspaceRoot, folderUris[0].fsPath);
+    const eligible = await this.fileScanner.listEligibleFilesInFolder(folderRelative);
+    const config = this.dataManager.getConfig();
+    const existingPaths = new Set(config.cards.map(c => c.filePath));
+    const newFiles = eligible.filter(f => !existingPaths.has(f));
+
+    if (newFiles.length === 0) {
+      vscode.window.showInformationMessage('追加できるファイルがありません。');
+      return;
+    }
+
+    await this.addFilesToBoard(newFiles);
+    vscode.window.showInformationMessage(`${newFiles.length}件のファイルを追加しました。`);
+  }
+
+  private async addFilesToBoard(filePaths: string[]): Promise<void> {
+    for (const filePath of filePaths) {
+      const card = this.dataManager.addCard(filePath);
+      const preview = await this.fileScanner.getFilePreview(filePath);
+      this.panel.webview.postMessage({
+        command: 'cardAdded',
+        card,
+        preview,
+      });
     }
   }
 
