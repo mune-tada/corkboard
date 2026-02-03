@@ -1,0 +1,48 @@
+/* メインCSS - VSCodeテーマ変数を使用 */
+
+:root {
+  --grid-columns: 4;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#corkboard-container {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  position: relative;
+}
+
+#empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--vscode-descriptionForeground);
+  gap: 8px;
+}
+
+#empty-state p:first-child {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.hidden {
+  display: none !important;
+}

@@ -1,0 +1,230 @@
+/* カードスタイル */
+
+.card {
+  --label-color: transparent;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  cursor: default;
+  transition: box-shadow 0.15s ease;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ラベルストライプ */
+.card-label-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--label-color);
+  border-radius: 6px 0 0 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.card.has-label .card-label-stripe {
+  opacity: 1;
+}
+
+/* カードヘッダー */
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 8px 4px 12px;
+  gap: 6px;
+  cursor: grab;
+  user-select: none;
+  background: var(--vscode-sideBarSectionHeader-background, transparent);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.card-header:active {
+  cursor: grabbing;
+}
+
+.card.has-label .card-header {
+  padding-left: 16px;
+}
+
+.card-number {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  padding: 1px 5px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.card-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-menu-btn {
+  background: none;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.card:hover .card-menu-btn {
+  opacity: 1;
+}
+
+.card-menu-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+/* カード概要 */
+.card-synopsis {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.5;
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  cursor: pointer;
+}
+
+.card.has-label .card-synopsis {
+  padding-left: 16px;
+}
+
+.card-synopsis:hover {
+  color: var(--vscode-foreground);
+}
+
+/* 概要編集テキストエリア */
+.synopsis-edit {
+  width: 100%;
+  min-height: 60px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 3px;
+  padding: 4px;
+  font-size: 11px;
+  font-family: var(--vscode-font-family);
+  resize: vertical;
+}
+
+.synopsis-edit:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* カードフッター */
+.card-footer {
+  padding: 4px 12px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 8px;
+}
+
+.card.has-label .card-footer {
+  padding-left: 16px;
+}
+
+.card-status-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+/* ステータススタンプ（Scrivener風の大きな斜めテキスト） */
+.card-status-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-25deg);
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--vscode-editorWarning-foreground, #e67e22);
+  opacity: 0.12;
+  pointer-events: none;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ドラッグ状態 */
+.card-ghost {
+  opacity: 0.4;
+  background: var(--vscode-list-hoverBackground);
+}
+
+.card-chosen {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.card-drag {
+  opacity: 0.9;
+}
+
+.card-dragging {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  z-index: 9999 !important;
+}
+
+/* コンテキストメニュー */
+.card-context-menu {
+  background: var(--vscode-menu-background);
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  padding: 4px 0;
+  min-width: 180px;
+}
+
+.menu-item {
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--vscode-menu-foreground);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-item:hover {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+
+/* ラベルスウォッチ */
+.label-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  flex-shrink: 0;
+}

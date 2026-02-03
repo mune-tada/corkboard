@@ -1,0 +1,71 @@
+{
+  "name": "corkboard",
+  "displayName": "Corkboard",
+  "description": "Scrivener風コルクボード - ファイルをカード（付箋）として並べ替え・整理",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "corkboard.open",
+        "title": "コルクボードを開く",
+        "category": "Corkboard"
+      },
+      {
+        "command": "corkboard.addCurrentFile",
+        "title": "コルクボードに追加",
+        "category": "Corkboard"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "corkboard.addCurrentFile",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Corkboard",
+      "properties": {
+        "corkboard.fileGlob": {
+          "type": "string",
+          "default": "**/*.{md,txt}",
+          "description": "コルクボード対象ファイルのGlobパターン"
+        },
+        "corkboard.synopsisLines": {
+          "type": "number",
+          "default": 3,
+          "description": "自動概要として表示する行数"
+        },
+        "corkboard.defaultGridColumns": {
+          "type": "number",
+          "default": 4,
+          "description": "グリッドモードのデフォルトカラム数"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/sortablejs": "^1.15.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^3.0.0"
+  },
+  "dependencies": {
+    "sortablejs": "^1.15.0"
+  }
+}

@@ -1,0 +1,18 @@
+/* フリーフォームモード */
+
+#corkboard-container.freeform-mode {
+  display: block;
+  min-height: 2000px;
+  min-width: 2000px;
+  position: relative;
+  /* コルクボード風の背景パターン */
+  background-image:
+    radial-gradient(circle, var(--vscode-panel-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+#corkboard-container.freeform-mode .card {
+  position: absolute;
+  width: 220px;
+  min-height: 150px;
+}

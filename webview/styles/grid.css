@@ -1,0 +1,8 @@
+/* グリッドモード */
+
+#corkboard-container.grid-mode {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns, 4), 1fr);
+  gap: 12px;
+  align-content: start;
+}
