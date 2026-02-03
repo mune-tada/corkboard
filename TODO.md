@@ -8,7 +8,7 @@
 - [x] `src/extension.ts` — コマンド登録
 - [x] `src/CorkboardPanel.ts` — WebviewPanel、HTML生成、CSP
 - [x] `webview/main.ts` + CSS — Webview初期化
-- [ ] npm install + ビルド確認
+- [x] npm install + ビルド確認
 - [ ] F5デバッグで動作確認
 
 ## Phase 2: データモデル + ファイル連携
@@ -42,15 +42,17 @@
 - [ ] 動作確認: 自由配置 → 確定 → グリッドに反映
 
 ## Phase 6: ファイル監視 + 仕上げ
-- [ ] FileSystemWatcherでファイル削除・変更検知
-- [ ] .corkboard.jsonの外部変更をリロード（基本実装済み）
+- [x] FileSystemWatcherでファイル削除・変更検知
+- [x] .corkboard.jsonの外部変更をリロード
 - [ ] キーボードショートカット（Delete: カード削除、Enter: ファイルを開く）
-- [ ] 空状態UI（カードなし時ガイド表示）
+- [x] 空状態UI（カードなし時ガイド表示）
 - [x] retainContextWhenHidden: true
+- [x] 削除済みファイルのカード警告表示
 
 ## Phase 7: ドキュメント + 開発体験
 - [x] CLAUDE.md 作成
 - [x] TODO.md 作成
-- [ ] README.md 作成
+- [x] README.md 作成
 - [x] .gitignore 作成
-- [ ] Git初期化 + 初回コミット
+- [x] Git初期化 + 初回コミット
+- [x] GitHub push

@@ -1,5 +1,5 @@
 import { initMessageHandler } from './messageHandler';
-import { initCorkboard, loadCorkboard, addCard } from './corkboard';
+import { initCorkboard, loadCorkboard, addCard, handleFileChanged, handleFileDeleted } from './corkboard';
 
 // VSCode API初期化
 const vscodeApi = initMessageHandler();
@@ -21,10 +21,10 @@ window.addEventListener('message', (event) => {
       loadCorkboard(message.data, message.filePreviews);
       break;
     case 'fileChanged':
-      // ファイル変更時はリロード（将来的に差分更新可能）
+      handleFileChanged(message.filePath, message.preview);
       break;
     case 'fileDeleted':
-      // ファイル削除時の処理（将来実装）
+      handleFileDeleted(message.filePath);
       break;
   }
 });

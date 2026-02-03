@@ -15,9 +15,12 @@ import {
 let currentConfig: CorkboardConfig | null = null;
 let filePreviews: Map<string, FilePreview> = new Map();
 
+let selectedCardId: string | null = null;
+
 /** コルクボードを初期化 */
 export function initCorkboard(): void {
   setupToolbar();
+  setupKeyboardShortcuts();
 }
 
 /** コルクボードのデータを読み込んで描画 */
@@ -72,8 +75,20 @@ function renderCards(): void {
       cardEl.dataset.posY = String(card.position.y);
     }
 
-    // カードクリック（概要エリアクリックでファイルを開く）
-    cardEl.querySelector('.card-synopsis')?.addEventListener('click', () => {
+    // カード選択
+    cardEl.addEventListener('click', (e) => {
+      // メニューボタンやテキストエリアのクリックは除外
+      const target = e.target as HTMLElement;
+      if (target.closest('.card-menu-btn') || target.closest('.synopsis-edit')) return;
+
+      // 前の選択を解除
+      container.querySelectorAll('.card-selected').forEach(el => el.classList.remove('card-selected'));
+      cardEl.classList.add('card-selected');
+      selectedCardId = card.id;
+    });
+
+    // カードダブルクリック（概要エリアでファイルを開く）
+    cardEl.querySelector('.card-synopsis')?.addEventListener('dblclick', () => {
       openFile(card.filePath);
     });
 
@@ -402,4 +417,75 @@ function removeCard(card: CardData, cardEl: HTMLElement): void {
       updateCardNumbers(container);
     }
   }
+}
+
+/** ファイル変更時のハンドラ — カード概要を更新 */
+export function handleFileChanged(filePath: string, preview: FilePreview): void {
+  filePreviews.set(filePath, preview);
+
+  if (!currentConfig) return;
+  const card = currentConfig.cards.find(c => c.filePath === filePath);
+  if (!card) return;
+
+  // カード概要がユーザー設定でない場合のみ更新
+  if (!card.synopsis) {
+    const container = document.getElementById('corkboard-container')!;
+    const cardEl = container.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
+    if (cardEl) {
+      const synopsisEl = cardEl.querySelector('.card-synopsis');
+      if (synopsisEl) {
+        synopsisEl.textContent = getSynopsisText(card, preview);
+      }
+    }
+  }
+}
+
+/** ファイル削除時のハンドラ — カードに警告表示 */
+export function handleFileDeleted(filePath: string): void {
+  if (!currentConfig) return;
+  const card = currentConfig.cards.find(c => c.filePath === filePath);
+  if (!card) return;
+
+  const container = document.getElementById('corkboard-container')!;
+  const cardEl = container.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
+  if (cardEl) {
+    cardEl.classList.add('card-file-deleted');
+    const synopsis = cardEl.querySelector('.card-synopsis');
+    if (synopsis) {
+      synopsis.textContent = '⚠ ファイルが削除されました';
+    }
+  }
+}
+
+/** キーボードショートカットの設定 */
+function setupKeyboardShortcuts(): void {
+  document.addEventListener('keydown', (e) => {
+    // テキスト入力中は無視
+    const active = document.activeElement;
+    if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+
+    if (!currentConfig || !selectedCardId) return;
+
+    const card = currentConfig.cards.find(c => c.id === selectedCardId);
+    if (!card) return;
+
+    const container = document.getElementById('corkboard-container')!;
+    const cardEl = container.querySelector<HTMLElement>(`[data-id="${selectedCardId}"]`);
+    if (!cardEl) return;
+
+    switch (e.key) {
+      case 'Delete':
+      case 'Backspace':
+        if (e.metaKey || e.ctrlKey) {
+          e.preventDefault();
+          removeCard(card, cardEl);
+          selectedCardId = null;
+        }
+        break;
+      case 'Enter':
+        e.preventDefault();
+        openFile(card.filePath);
+        break;
+    }
+  });
 }

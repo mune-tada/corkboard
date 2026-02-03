@@ -175,6 +175,12 @@
   letter-spacing: 2px;
 }
 
+/* 選択状態 */
+.card-selected {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+
 /* ドラッグ状態 */
 .card-ghost {
   opacity: 0.4;
@@ -218,6 +224,17 @@
 .menu-item:hover {
   background: var(--vscode-menu-selectionBackground);
   color: var(--vscode-menu-selectionForeground);
+}
+
+/* ファイル削除済みカード */
+.card-file-deleted {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.card-file-deleted .card-synopsis {
+  color: var(--vscode-editorWarning-foreground, #e67e22);
+  font-style: italic;
 }
 
 /* ラベルスウォッチ */

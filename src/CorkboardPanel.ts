@@ -53,7 +53,7 @@ export class CorkboardPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
-    workspaceRoot: string
+    private readonly workspaceRoot: string
   ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
@@ -72,6 +72,9 @@ export class CorkboardPanel {
       this.disposables
     );
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+    // ワークスペースファイルの変更監視
+    this.setupFileWatcher();
 
     // 初期データを送信
     this.initialize();
@@ -213,6 +216,39 @@ export class CorkboardPanel {
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
+  }
+
+  /** ワークスペースファイルの変更・削除を監視 */
+  private setupFileWatcher(): void {
+    const glob = vscode.workspace.getConfiguration('corkboard').get<string>('fileGlob', '**/*.{md,txt}');
+    const pattern = new vscode.RelativePattern(this.workspaceRoot, glob);
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+
+    // ファイル変更時 → カードの概要を更新
+    watcher.onDidChange(async (uri) => {
+      const config = this.dataManager.getConfig();
+      const filePath = path.relative(this.workspaceRoot, uri.fsPath);
+      const card = config.cards.find(c => c.filePath === filePath);
+      if (card) {
+        const preview = await this.fileScanner.getFilePreview(filePath);
+        this.panel.webview.postMessage({
+          command: 'fileChanged',
+          filePath,
+          preview,
+        });
+      }
+    }, null, this.disposables);
+
+    // ファイル削除時 → Webviewに通知
+    watcher.onDidDelete((uri) => {
+      const filePath = path.relative(this.workspaceRoot, uri.fsPath);
+      this.panel.webview.postMessage({
+        command: 'fileDeleted',
+        filePath,
+      });
+    }, null, this.disposables);
+
+    this.disposables.push(watcher);
   }
 
   private dispose(): void {
