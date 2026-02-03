@@ -1,5 +1,5 @@
 import { initMessageHandler } from './messageHandler';
-import { initCorkboard, loadCorkboard, addCard, handleFileChanged, handleFileDeleted, handleFileRenamed, updateBoardSelector } from './corkboard';
+import { initCorkboard, loadCorkboard, addCard, handleFileChanged, handleFileDeleted, handleFileRenamed, updateBoardSelector, handleFileContents } from './corkboard';
 
 // VSCode API初期化
 const vscodeApi = initMessageHandler();
@@ -31,6 +31,9 @@ window.addEventListener('message', (event) => {
       break;
     case 'boardList':
       updateBoardSelector(message.boards, message.activeBoard);
+      break;
+    case 'fileContents':
+      handleFileContents(message.contents);
       break;
   }
 });

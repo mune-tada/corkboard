@@ -1,7 +1,7 @@
 /** Webview側で使用する型定義（Extension側のtypes.tsと同期） */
 
 export interface CorkboardConfig {
-  viewMode: 'grid' | 'freeform';
+  viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
   cardSize: { width: number; height: number };
   cards: CardData[];
@@ -28,6 +28,12 @@ export interface FilePreview {
   filePath: string;
   firstLines: string;
   frontmatterSynopsis: string | null;
+}
+
+/** ファイル全文データ（テキストモード用） */
+export interface FileContent {
+  filePath: string;
+  content: string;
 }
 
 /** VSCode Webview API */

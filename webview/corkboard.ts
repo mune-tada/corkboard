@@ -2,6 +2,7 @@ import { CorkboardConfig, CardData, FilePreview, LabelDefinition } from './types
 import { createCardElement, getSynopsisText, applyLabelColorVars, removeLabelColorVars } from './cardRenderer';
 import { initGridMode, destroyGridMode, updateCardNumbers } from './gridMode';
 import { initFreeformMode, destroyFreeformMode, commitFreeformOrder } from './freeformMode';
+import { renderTextMode, destroyTextMode, setFileContents, setTextSubMode, getTextSubMode } from './textMode';
 import {
   openFile,
   requestFilePicker,
@@ -15,6 +16,8 @@ import {
   sendRequestNewBoard,
   sendRequestRenameBoard,
   sendRequestDeleteBoard,
+  sendRequestFileContents,
+  sendExportMarkdown,
 } from './messageHandler';
 
 let currentConfig: CorkboardConfig | null = null;
@@ -64,8 +67,15 @@ function renderCards(): void {
   // 既存モードを破棄
   destroyGridMode();
   destroyFreeformMode(container);
+  destroyTextMode(container);
 
   container.innerHTML = '';
+
+  // テキストモードは別レンダリング
+  if (currentConfig.viewMode === 'text') {
+    renderTextMode(container, currentConfig.cards, filePreviews);
+    return;
+  }
 
   // カードを順序でソート
   const sortedCards = [...currentConfig.cards].sort((a, b) => a.order - b.order);
@@ -148,14 +158,40 @@ function setupToolbar(): void {
   // モード切替ボタン
   document.querySelectorAll<HTMLElement>('.mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const mode = btn.dataset.mode as 'grid' | 'freeform';
+      const mode = btn.dataset.mode as 'grid' | 'freeform' | 'text';
       if (currentConfig && currentConfig.viewMode !== mode) {
         currentConfig.viewMode = mode;
         sendSetViewMode(mode);
+        if (mode === 'text' && getTextSubMode() === 'full') {
+          sendRequestFileContents();
+        }
         renderCards();
         updateToolbarState();
       }
     });
+  });
+
+  // テキストモード: サブモード切替
+  document.querySelectorAll<HTMLElement>('.text-sub-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sub = btn.dataset.sub as 'synopsis' | 'full';
+      if (getTextSubMode() === sub) return;
+      setTextSubMode(sub);
+      document.querySelectorAll<HTMLElement>('.text-sub-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.sub === sub);
+      });
+      if (sub === 'full') {
+        sendRequestFileContents();
+      }
+      if (currentConfig?.viewMode === 'text') {
+        renderCards();
+      }
+    });
+  });
+
+  // テキストモード: MDエクスポート
+  document.getElementById('btn-export-md')?.addEventListener('click', () => {
+    sendExportMarkdown();
   });
 
   // 順序確定ボタン
@@ -200,6 +236,10 @@ function updateToolbarState(): void {
   // カラム数コントロールの表示/非表示
   const colsControl = document.getElementById('columns-control')!;
   colsControl.classList.toggle('hidden', currentConfig.viewMode !== 'grid');
+
+  // テキストモードコントロールの表示/非表示
+  const textControls = document.getElementById('text-controls')!;
+  textControls.classList.toggle('hidden', currentConfig.viewMode !== 'text');
 
   updateColumnsDisplay();
   applyGridColumns();
@@ -577,6 +617,16 @@ export function handleFileRenamed(cardId: string, oldPath: string, newPath: stri
       titleEl.textContent = newName;
       titleEl.setAttribute('title', newPath);
     }
+  }
+}
+
+/** ファイル全文受信ハンドラ（テキストモード用） */
+export function handleFileContents(contents: { filePath: string; content: string }[]): void {
+  setFileContents(contents);
+  // テキストモード表示中なら再描画
+  if (currentConfig?.viewMode === 'text') {
+    const container = document.getElementById('corkboard-container')!;
+    renderTextMode(container, currentConfig.cards, filePreviews);
   }
 }
 

@@ -190,7 +190,7 @@ export class CorkboardDataManager {
   }
 
   /** 表示モード変更 */
-  setViewMode(mode: 'grid' | 'freeform'): void {
+  setViewMode(mode: 'grid' | 'freeform' | 'text'): void {
     const config = this.getConfig();
     config.viewMode = mode;
     this.scheduleSave();

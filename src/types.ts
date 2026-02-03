@@ -1,6 +1,6 @@
 /** 1つのボードの設定 */
 export interface CorkboardConfig {
-  viewMode: 'grid' | 'freeform';
+  viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
   cardSize: { width: number; height: number };
   cards: CardData[];
@@ -18,7 +18,7 @@ export interface CorkboardRootConfig {
 /** v1: 後方互換（読み込み用） */
 export interface CorkboardConfigV1 {
   version: 1;
-  viewMode: 'grid' | 'freeform';
+  viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
   cardSize: { width: number; height: number };
   cards: CardData[];
@@ -50,6 +50,12 @@ export interface FilePreview {
   frontmatterSynopsis: string | null;
 }
 
+/** ファイル全文データ（テキストモード用） */
+export interface FileContent {
+  filePath: string;
+  content: string;
+}
+
 /** Extension → Webview メッセージ */
 export type ExtensionToWebviewMessage =
   | { command: 'loadCorkboard'; data: CorkboardConfig; filePreviews: FilePreview[] }
@@ -58,7 +64,8 @@ export type ExtensionToWebviewMessage =
   | { command: 'fileDeleted'; filePath: string }
   | { command: 'configReloaded'; data: CorkboardConfig; filePreviews: FilePreview[] }
   | { command: 'fileRenamed'; cardId: string; oldPath: string; newPath: string }
-  | { command: 'boardList'; boards: string[]; activeBoard: string };
+  | { command: 'boardList'; boards: string[]; activeBoard: string }
+  | { command: 'fileContents'; contents: FileContent[] };
 
 /** Webview → Extension メッセージ */
 export type WebviewToExtensionMessage =
@@ -67,7 +74,7 @@ export type WebviewToExtensionMessage =
   | { command: 'moveCard'; cardId: string; position: { x: number; y: number } }
   | { command: 'updateCard'; cardId: string; changes: Partial<CardData> }
   | { command: 'removeCard'; cardId: string }
-  | { command: 'setViewMode'; mode: 'grid' | 'freeform' }
+  | { command: 'setViewMode'; mode: 'grid' | 'freeform' | 'text' }
   | { command: 'commitFreeformOrder'; cardIds: string[] }
   | { command: 'updateSynopsis'; cardId: string; synopsis: string }
   | { command: 'requestFilePicker' }
@@ -76,7 +83,9 @@ export type WebviewToExtensionMessage =
   | { command: 'switchBoard'; name: string }
   | { command: 'requestNewBoard' }
   | { command: 'requestRenameBoard' }
-  | { command: 'requestDeleteBoard' };
+  | { command: 'requestDeleteBoard' }
+  | { command: 'requestFileContents' }
+  | { command: 'exportMarkdown' };
 
 /** デフォルトのボード設定を生成 */
 export function createDefaultBoardConfig(): CorkboardConfig {

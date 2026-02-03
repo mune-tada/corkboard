@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { FilePreview } from './types';
+import { FilePreview, FileContent } from './types';
 import { extractFrontmatterSynopsis, getFirstLines } from './utils';
 
 export class FileScanner {
@@ -38,6 +38,29 @@ export class FileScanner {
     const glob = vscode.workspace.getConfiguration('corkboard').get<string>('fileGlob', '**/*.{md,txt}');
     const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**', 500);
     return uris.map(uri => path.relative(this.workspaceRoot, uri.fsPath));
+  }
+
+  /** ファイルの全文を取得 */
+  async getFileContent(filePath: string): Promise<FileContent> {
+    const fullPath = path.join(this.workspaceRoot, filePath);
+    const uri = vscode.Uri.file(fullPath);
+    try {
+      const data = await vscode.workspace.fs.readFile(uri);
+      return {
+        filePath,
+        content: Buffer.from(data).toString('utf-8'),
+      };
+    } catch {
+      return {
+        filePath,
+        content: '（ファイルを読み込めません）',
+      };
+    }
+  }
+
+  /** 複数ファイルの全文を取得 */
+  async getFileContents(filePaths: string[]): Promise<FileContent[]> {
+    return Promise.all(filePaths.map(fp => this.getFileContent(fp)));
   }
 
   /** 指定フォルダ内の対象ファイルを一覧取得 */

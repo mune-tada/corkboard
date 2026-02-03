@@ -40,7 +40,7 @@ export function sendRemoveCard(cardId: string): void {
 }
 
 /** 表示モード変更 */
-export function sendSetViewMode(mode: 'grid' | 'freeform'): void {
+export function sendSetViewMode(mode: 'grid' | 'freeform' | 'text'): void {
   postMessage({ command: 'setViewMode', mode });
 }
 
@@ -87,4 +87,14 @@ export function sendRequestRenameBoard(): void {
 /** ボード削除リクエスト */
 export function sendRequestDeleteBoard(): void {
   postMessage({ command: 'requestDeleteBoard' });
+}
+
+/** ファイル全文リクエスト（テキストモード用） */
+export function sendRequestFileContents(): void {
+  postMessage({ command: 'requestFileContents' });
+}
+
+/** Markdownエクスポートリクエスト */
+export function sendExportMarkdown(): void {
+  postMessage({ command: 'exportMarkdown' });
 }

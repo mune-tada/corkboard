@@ -1,0 +1,111 @@
+/* テキストモード */
+
+.text-mode-container {
+  padding: 16px 24px;
+  overflow-y: auto;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.text-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 14px;
+}
+
+.text-entry {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.text-entry:last-child {
+  border-bottom: none;
+}
+
+.text-entry-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.text-entry-number {
+  font-weight: bold;
+  font-size: 14px;
+  color: var(--vscode-descriptionForeground);
+  min-width: 2em;
+}
+
+.text-entry-filename {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--vscode-foreground);
+}
+
+.text-entry-path {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  margin-left: auto;
+}
+
+.text-entry-meta {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.text-meta-tag {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+.text-meta-label {
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.text-meta-status {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.text-entry-synopsis {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vscode-foreground);
+  padding: 8px 12px;
+  background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.1));
+  border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+  border-radius: 0 4px 4px 0;
+  white-space: pre-wrap;
+}
+
+.text-entry-body {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vscode-editor-foreground, var(--vscode-foreground));
+  background: var(--vscode-editor-background, rgba(0, 0, 0, 0.1));
+  padding: 12px 16px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family, monospace);
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* テキストモード用サブボタン */
+.text-sub-btn.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+#text-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

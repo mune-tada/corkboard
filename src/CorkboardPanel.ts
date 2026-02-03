@@ -140,6 +140,9 @@ export class CorkboardPanel {
         break;
       case 'setViewMode':
         this.dataManager.setViewMode(msg.mode);
+        if (msg.mode === 'text') {
+          await this.sendFileContents();
+        }
         break;
       case 'commitFreeformOrder':
         this.dataManager.reorderCards(msg.cardIds);
@@ -178,6 +181,12 @@ export class CorkboardPanel {
         }
         break;
       }
+      case 'requestFileContents':
+        await this.sendFileContents();
+        break;
+      case 'exportMarkdown':
+        await this.handleExportMarkdown();
+        break;
       case 'requestDeleteBoard': {
         const boards = this.dataManager.getBoardNames();
         if (boards.length <= 1) {
@@ -268,6 +277,69 @@ export class CorkboardPanel {
     vscode.window.showInformationMessage(`${newFiles.length}件のファイルを追加しました。`);
   }
 
+  /** テキストモード用にファイル全文を送信 */
+  private async sendFileContents(): Promise<void> {
+    const config = this.dataManager.getConfig();
+    const filePaths = config.cards.map(c => c.filePath);
+    const contents = await this.fileScanner.getFileContents(filePaths);
+    this.panel.webview.postMessage({
+      command: 'fileContents',
+      contents,
+    });
+  }
+
+  /** Markdownエクスポート */
+  private async handleExportMarkdown(): Promise<void> {
+    const config = this.dataManager.getConfig();
+    const sortedCards = [...config.cards].sort((a, b) => a.order - b.order);
+    const filePaths = sortedCards.map(c => c.filePath);
+    const previews = await this.fileScanner.getFilePreviews(filePaths);
+    const contents = await this.fileScanner.getFileContents(filePaths);
+
+    const previewMap = new Map(previews.map(p => [p.filePath, p]));
+    const contentMap = new Map(contents.map(c => [c.filePath, c]));
+
+    const lines: string[] = [];
+    sortedCards.forEach((card, i) => {
+      const fileName = path.basename(card.filePath);
+      lines.push(`## ${i + 1}. ${fileName}`);
+      lines.push('');
+
+      const preview = previewMap.get(card.filePath);
+      const synopsis = card.synopsis
+        || preview?.frontmatterSynopsis
+        || preview?.firstLines
+        || '';
+      if (synopsis) {
+        synopsis.split('\n').forEach(line => {
+          lines.push(`> ${line}`);
+        });
+        lines.push('');
+      }
+
+      const fileContent = contentMap.get(card.filePath);
+      if (fileContent && fileContent.content !== '（ファイルを読み込めません）') {
+        lines.push(fileContent.content);
+        lines.push('');
+      }
+
+      lines.push('---');
+      lines.push('');
+    });
+
+    const mdContent = lines.join('\n');
+
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(this.workspaceRoot, 'export.md')),
+      filters: { 'Markdown': ['md'] },
+    });
+
+    if (uri) {
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(mdContent, 'utf-8'));
+      vscode.window.showInformationMessage(`Markdownをエクスポートしました: ${path.basename(uri.fsPath)}`);
+    }
+  }
+
   private async addFilesToBoard(filePaths: string[]): Promise<void> {
     for (const filePath of filePaths) {
       const card = this.dataManager.addCard(filePath);
@@ -312,6 +384,7 @@ export class CorkboardPanel {
       <div class="toolbar-separator"></div>
       <button id="btn-grid" class="toolbar-btn mode-btn active" data-mode="grid" title="グリッドモード">グリッド</button>
       <button id="btn-freeform" class="toolbar-btn mode-btn" data-mode="freeform" title="フリーフォームモード">フリーフォーム</button>
+      <button id="btn-text" class="toolbar-btn mode-btn" data-mode="text" title="テキストモード">テキスト</button>
     </div>
     <div class="toolbar-right">
       <button id="btn-commit" class="toolbar-btn hidden" title="現在の配置から順序を確定">順序を確定</button>
@@ -321,6 +394,12 @@ export class CorkboardPanel {
         <span id="col-count">4</span>
         <button id="btn-col-plus" class="toolbar-btn-small">＋</button>
       </label>
+      <div id="text-controls" class="hidden">
+        <button id="btn-text-synopsis" class="toolbar-btn text-sub-btn active" data-sub="synopsis" title="概要のみ">概要のみ</button>
+        <button id="btn-text-full" class="toolbar-btn text-sub-btn" data-sub="full" title="本文＋概要">本文＋概要</button>
+        <div class="toolbar-separator"></div>
+        <button id="btn-export-md" class="toolbar-btn" title="Markdownでエクスポート">MDエクスポート</button>
+      </div>
     </div>
   </div>
   <div id="corkboard-container"></div>
