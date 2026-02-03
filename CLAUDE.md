@@ -68,3 +68,27 @@ postMessage によるメッセージパッシング。型は `src/types.ts` に�
 - UIテキストは日本語
 - VSCode CSS変数（`--vscode-*`）でテーマ対応
 - CSPノンスを使用（Webview HTMLに必須）
+
+## 作業スタイル（必ず守ること）
+
+### 進捗管理
+- **TodoWriteツール**を常に使い、作業中のタスクを可視化する
+- タスクが完了したら即座にcompletedにする。まとめて更新しない
+- 大きなタスクは小さなステップに分割してから着手する
+
+### TODO.md の更新
+- コード変更と一緒に `TODO.md` も更新する
+- `[ ]` / `[x]` 形式でチェックリストを維持する
+- 新しいタスクが発生したら追記する
+- このファイルがプロジェクトの「現在地」になるので、常に最新にしておく
+
+### Git コミット
+- **ひと段落ごとに必ずコミット + push**する（機能追加、バグ修正、リファクタ等の区切り）
+- コミットメッセージは英語で、内容を簡潔に記述
+- `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` を末尾に付ける
+- リモート: `git@github.com:mune-tada/corkboard.git` (origin/main)
+
+### セッション引き継ぎ
+- 作業を中断する場合でも、TODO.mdとCLAUDE.mdが最新であることを確認する
+- 次のセッション（VSCode Claude Code / ターミナル Claude Code どちらでも）では、まず `CLAUDE.md` と `TODO.md` を読んで現状を把握してから作業を再開する
+- ビルド確認: 作業再開時は `npm run build` でビルドが通ることを最初に確認する
