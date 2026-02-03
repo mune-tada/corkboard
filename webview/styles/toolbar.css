@@ -80,3 +80,20 @@
   font-weight: bold;
   color: var(--vscode-foreground);
 }
+
+/* ボードセレクタ */
+.toolbar-select {
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  min-width: 100px;
+  cursor: pointer;
+  outline: none;
+}
+
+.toolbar-select:focus {
+  border-color: var(--vscode-focusBorder);
+}

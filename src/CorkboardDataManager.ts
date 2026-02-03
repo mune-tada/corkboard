@@ -1,19 +1,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { CorkboardConfig, CardData, createDefaultConfig } from './types';
+import { CorkboardConfig, CorkboardRootConfig, CorkboardConfigV1, CardData, createDefaultConfig, createDefaultBoardConfig } from './types';
 import { generateId } from './utils';
 
 export class CorkboardDataManager {
+  private rootConfig: CorkboardRootConfig | null = null;
   private config: CorkboardConfig | null = null;
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private configWatcher: vscode.FileSystemWatcher | null = null;
-  private onConfigChanged: (() => void) | null = null;
+  private onConfigChangedCallback: (() => void) | null = null;
 
   constructor(private workspaceRoot: string) {}
 
   /** 設定変更コールバックを登録 */
   setOnConfigChanged(callback: () => void): void {
-    this.onConfigChanged = callback;
+    this.onConfigChangedCallback = callback;
   }
 
   /** .corkboard.json のパス */
@@ -21,27 +22,119 @@ export class CorkboardDataManager {
     return path.join(this.workspaceRoot, '.corkboard.json');
   }
 
+  /** v1 → v2 マイグレーション */
+  private migrateV1toV2(v1: CorkboardConfigV1): CorkboardRootConfig {
+    const { version: _, ...boardConfig } = v1;
+    return {
+      version: 2,
+      activeBoard: 'メインボード',
+      boards: {
+        'メインボード': boardConfig as CorkboardConfig,
+      },
+    };
+  }
+
   /** 設定を読み込み（なければデフォルト作成） */
   async load(): Promise<CorkboardConfig> {
     const uri = vscode.Uri.file(this.configPath);
     try {
       const data = await vscode.workspace.fs.readFile(uri);
-      this.config = JSON.parse(Buffer.from(data).toString('utf-8'));
+      const raw = JSON.parse(Buffer.from(data).toString('utf-8'));
+
+      if (raw.version === 1) {
+        this.rootConfig = this.migrateV1toV2(raw as CorkboardConfigV1);
+        await this.saveImmediate();
+      } else if (raw.version === 2) {
+        this.rootConfig = raw as CorkboardRootConfig;
+      } else {
+        this.rootConfig = createDefaultConfig();
+        await this.saveImmediate();
+      }
     } catch {
-      this.config = createDefaultConfig();
+      this.rootConfig = createDefaultConfig();
       await this.saveImmediate();
     }
+
+    this.config = this.rootConfig.boards[this.rootConfig.activeBoard];
+    if (!this.config) {
+      const boardNames = Object.keys(this.rootConfig.boards);
+      this.rootConfig.activeBoard = boardNames[0] || 'メインボード';
+      this.config = this.rootConfig.boards[this.rootConfig.activeBoard];
+      if (!this.config) {
+        this.config = createDefaultBoardConfig();
+        this.rootConfig.boards[this.rootConfig.activeBoard] = this.config;
+      }
+    }
+
     this.startWatching();
-    return this.config!;
+    return this.config;
   }
 
-  /** 現在の設定を返す */
+  /** 現在のボード設定を返す */
   getConfig(): CorkboardConfig {
     if (!this.config) {
       throw new Error('Config not loaded. Call load() first.');
     }
     return this.config;
   }
+
+  // ---- ボード管理 ----
+
+  /** ボード名一覧を返す */
+  getBoardNames(): string[] {
+    if (!this.rootConfig) return [];
+    return Object.keys(this.rootConfig.boards);
+  }
+
+  /** アクティブボード名を返す */
+  getActiveBoard(): string {
+    return this.rootConfig?.activeBoard || 'メインボード';
+  }
+
+  /** ボードを切替 */
+  switchBoard(name: string): CorkboardConfig {
+    if (!this.rootConfig) throw new Error('Not loaded');
+    if (!this.rootConfig.boards[name]) throw new Error(`Board not found: ${name}`);
+    this.rootConfig.activeBoard = name;
+    this.config = this.rootConfig.boards[name];
+    this.scheduleSave();
+    return this.config;
+  }
+
+  /** 新規ボード作成 */
+  createBoard(name: string): void {
+    if (!this.rootConfig) throw new Error('Not loaded');
+    if (this.rootConfig.boards[name]) return;
+    this.rootConfig.boards[name] = createDefaultBoardConfig();
+    this.scheduleSave();
+  }
+
+  /** ボードリネーム */
+  renameBoard(oldName: string, newName: string): void {
+    if (!this.rootConfig) throw new Error('Not loaded');
+    const board = this.rootConfig.boards[oldName];
+    if (!board || this.rootConfig.boards[newName]) return;
+    this.rootConfig.boards[newName] = board;
+    delete this.rootConfig.boards[oldName];
+    if (this.rootConfig.activeBoard === oldName) {
+      this.rootConfig.activeBoard = newName;
+    }
+    this.scheduleSave();
+  }
+
+  /** ボード削除 */
+  deleteBoard(name: string): void {
+    if (!this.rootConfig) throw new Error('Not loaded');
+    if (Object.keys(this.rootConfig.boards).length <= 1) return;
+    delete this.rootConfig.boards[name];
+    if (this.rootConfig.activeBoard === name) {
+      this.rootConfig.activeBoard = Object.keys(this.rootConfig.boards)[0];
+      this.config = this.rootConfig.boards[this.rootConfig.activeBoard];
+    }
+    this.scheduleSave();
+  }
+
+  // ---- カード操作 ----
 
   /** カードを追加 */
   addCard(filePath: string): CardData {
@@ -68,7 +161,6 @@ export class CorkboardDataManager {
   removeCard(cardId: string): void {
     const config = this.getConfig();
     config.cards = config.cards.filter(c => c.id !== cardId);
-    // orderを再割り当て
     config.cards
       .sort((a, b) => a.order - b.order)
       .forEach((c, i) => { c.order = i; });
@@ -111,6 +203,8 @@ export class CorkboardDataManager {
     this.scheduleSave();
   }
 
+  // ---- 保存・監視 ----
+
   /** デバウンス保存（500ms） */
   private scheduleSave(): void {
     if (this.saveTimeout) {
@@ -123,9 +217,9 @@ export class CorkboardDataManager {
 
   /** 即座に保存 */
   async saveImmediate(): Promise<void> {
-    if (!this.config) return;
+    if (!this.rootConfig) return;
     const uri = vscode.Uri.file(this.configPath);
-    const content = JSON.stringify(this.config, null, 2);
+    const content = JSON.stringify(this.rootConfig, null, 2);
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf-8'));
   }
 
@@ -135,12 +229,15 @@ export class CorkboardDataManager {
     const pattern = new vscode.RelativePattern(this.workspaceRoot, '.corkboard.json');
     this.configWatcher = vscode.workspace.createFileSystemWatcher(pattern);
     this.configWatcher.onDidChange(async () => {
-      // 外部変更を検知してリロード
       const uri = vscode.Uri.file(this.configPath);
       try {
         const data = await vscode.workspace.fs.readFile(uri);
-        this.config = JSON.parse(Buffer.from(data).toString('utf-8'));
-        this.onConfigChanged?.();
+        const raw = JSON.parse(Buffer.from(data).toString('utf-8'));
+        if (raw.version === 2) {
+          this.rootConfig = raw as CorkboardRootConfig;
+          this.config = this.rootConfig.boards[this.rootConfig.activeBoard];
+        }
+        this.onConfigChangedCallback?.();
       } catch {
         // ignore parse errors
       }

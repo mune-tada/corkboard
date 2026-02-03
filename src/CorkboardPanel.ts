@@ -93,6 +93,27 @@ export class CorkboardPanel {
       data: config,
       filePreviews,
     });
+    this.sendBoardList();
+  }
+
+  private async sendFullStateAndBoardList(): Promise<void> {
+    const config = this.dataManager.getConfig();
+    const filePaths = config.cards.map(c => c.filePath);
+    const filePreviews = await this.fileScanner.getFilePreviews(filePaths);
+    this.panel.webview.postMessage({
+      command: 'loadCorkboard',
+      data: config,
+      filePreviews,
+    });
+    this.sendBoardList();
+  }
+
+  private sendBoardList(): void {
+    this.panel.webview.postMessage({
+      command: 'boardList',
+      boards: this.dataManager.getBoardNames(),
+      activeBoard: this.dataManager.getActiveBoard(),
+    });
   }
 
   private async handleMessage(msg: WebviewToExtensionMessage): Promise<void> {
@@ -135,6 +156,46 @@ export class CorkboardPanel {
       case 'renameFile':
         await this.handleRenameFile(msg.cardId, msg.oldPath, msg.newFileName);
         break;
+      case 'switchBoard':
+        this.dataManager.switchBoard(msg.name);
+        await this.sendFullStateAndBoardList();
+        break;
+      case 'requestNewBoard': {
+        const name = await vscode.window.showInputBox({ prompt: '新しいボード名を入力', placeHolder: 'ボード名' });
+        if (name) {
+          this.dataManager.createBoard(name);
+          this.dataManager.switchBoard(name);
+          await this.sendFullStateAndBoardList();
+        }
+        break;
+      }
+      case 'requestRenameBoard': {
+        const currentName = this.dataManager.getActiveBoard();
+        const newName = await vscode.window.showInputBox({ prompt: 'ボード名を変更', value: currentName });
+        if (newName && newName !== currentName) {
+          this.dataManager.renameBoard(currentName, newName);
+          this.sendBoardList();
+        }
+        break;
+      }
+      case 'requestDeleteBoard': {
+        const boards = this.dataManager.getBoardNames();
+        if (boards.length <= 1) {
+          vscode.window.showWarningMessage('最後のボードは削除できません。');
+          break;
+        }
+        const active = this.dataManager.getActiveBoard();
+        const confirm = await vscode.window.showWarningMessage(
+          `ボード「${active}」を削除しますか？`,
+          { modal: true },
+          '削除'
+        );
+        if (confirm === '削除') {
+          this.dataManager.deleteBoard(active);
+          await this.sendFullStateAndBoardList();
+        }
+        break;
+      }
     }
   }
 
@@ -242,6 +303,11 @@ export class CorkboardPanel {
 <body>
   <div id="toolbar">
     <div class="toolbar-left">
+      <select id="board-selector" class="toolbar-select" title="ボードを選択"></select>
+      <button id="btn-new-board" class="toolbar-btn-small" title="新しいボード">＋</button>
+      <button id="btn-rename-board" class="toolbar-btn-small" title="ボード名変更">✎</button>
+      <button id="btn-delete-board" class="toolbar-btn-small" title="ボードを削除">✕</button>
+      <div class="toolbar-separator"></div>
       <button id="btn-add-files" class="toolbar-btn" title="ファイルを追加">＋ ファイルを追加</button>
       <div class="toolbar-separator"></div>
       <button id="btn-grid" class="toolbar-btn mode-btn active" data-mode="grid" title="グリッドモード">グリッド</button>

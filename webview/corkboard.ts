@@ -11,6 +11,10 @@ import {
   sendUpdateCard,
   sendUpdateSynopsis,
   sendRenameFile,
+  sendSwitchBoard,
+  sendRequestNewBoard,
+  sendRequestRenameBoard,
+  sendRequestDeleteBoard,
 } from './messageHandler';
 
 let currentConfig: CorkboardConfig | null = null;
@@ -119,6 +123,23 @@ function renderCards(): void {
 
 /** ツールバーのイベント設定 */
 function setupToolbar(): void {
+  // ボードセレクタ
+  document.getElementById('board-selector')?.addEventListener('change', (e) => {
+    const select = e.target as HTMLSelectElement;
+    sendSwitchBoard(select.value);
+  });
+
+  // ボード管理ボタン
+  document.getElementById('btn-new-board')?.addEventListener('click', () => {
+    sendRequestNewBoard();
+  });
+  document.getElementById('btn-rename-board')?.addEventListener('click', () => {
+    sendRequestRenameBoard();
+  });
+  document.getElementById('btn-delete-board')?.addEventListener('click', () => {
+    sendRequestDeleteBoard();
+  });
+
   // ファイル追加ボタン
   document.getElementById('btn-add-files')?.addEventListener('click', () => {
     requestFilePicker();
@@ -476,6 +497,20 @@ function removeCard(card: CardData, cardEl: HTMLElement): void {
       updateCardNumbers(container);
     }
   }
+}
+
+/** ボードセレクタを更新 */
+export function updateBoardSelector(boards: string[], activeBoard: string): void {
+  const selector = document.getElementById('board-selector') as HTMLSelectElement;
+  if (!selector) return;
+  selector.innerHTML = '';
+  boards.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    opt.selected = name === activeBoard;
+    selector.appendChild(opt);
+  });
 }
 
 /** ファイル変更時のハンドラ — カード概要を更新 */

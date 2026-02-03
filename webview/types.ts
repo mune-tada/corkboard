@@ -1,7 +1,6 @@
 /** Webview側で使用する型定義（Extension側のtypes.tsと同期） */
 
 export interface CorkboardConfig {
-  version: 1;
   viewMode: 'grid' | 'freeform';
   gridColumns: number;
   cardSize: { width: number; height: number };

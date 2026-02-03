@@ -1,5 +1,22 @@
-/** .corkboard.json のルート設定 */
+/** 1つのボードの設定 */
 export interface CorkboardConfig {
+  viewMode: 'grid' | 'freeform';
+  gridColumns: number;
+  cardSize: { width: number; height: number };
+  cards: CardData[];
+  labelColors: LabelDefinition[];
+  statusOptions: string[];
+}
+
+/** v2: 複数ボード対応のルート設定 (.corkboard.json) */
+export interface CorkboardRootConfig {
+  version: 2;
+  activeBoard: string;
+  boards: Record<string, CorkboardConfig>;
+}
+
+/** v1: 後方互換（読み込み用） */
+export interface CorkboardConfigV1 {
   version: 1;
   viewMode: 'grid' | 'freeform';
   gridColumns: number;
@@ -40,7 +57,8 @@ export type ExtensionToWebviewMessage =
   | { command: 'fileChanged'; filePath: string; preview: FilePreview }
   | { command: 'fileDeleted'; filePath: string }
   | { command: 'configReloaded'; data: CorkboardConfig; filePreviews: FilePreview[] }
-  | { command: 'fileRenamed'; cardId: string; oldPath: string; newPath: string };
+  | { command: 'fileRenamed'; cardId: string; oldPath: string; newPath: string }
+  | { command: 'boardList'; boards: string[]; activeBoard: string };
 
 /** Webview → Extension メッセージ */
 export type WebviewToExtensionMessage =
@@ -54,12 +72,15 @@ export type WebviewToExtensionMessage =
   | { command: 'updateSynopsis'; cardId: string; synopsis: string }
   | { command: 'requestFilePicker' }
   | { command: 'setGridColumns'; columns: number }
-  | { command: 'renameFile'; cardId: string; oldPath: string; newFileName: string };
+  | { command: 'renameFile'; cardId: string; oldPath: string; newFileName: string }
+  | { command: 'switchBoard'; name: string }
+  | { command: 'requestNewBoard' }
+  | { command: 'requestRenameBoard' }
+  | { command: 'requestDeleteBoard' };
 
-/** デフォルト設定 */
-export function createDefaultConfig(): CorkboardConfig {
+/** デフォルトのボード設定を生成 */
+export function createDefaultBoardConfig(): CorkboardConfig {
   return {
-    version: 1,
     viewMode: 'grid',
     gridColumns: 4,
     cardSize: { width: 200, height: 150 },
@@ -73,5 +94,16 @@ export function createDefaultConfig(): CorkboardConfig {
       { name: '紫', color: '#9b59b6' },
     ],
     statusOptions: ['未着手', '下書き', '推敲中', '完成'],
+  };
+}
+
+/** デフォルトのルート設定を生成 */
+export function createDefaultConfig(): CorkboardRootConfig {
+  return {
+    version: 2,
+    activeBoard: 'メインボード',
+    boards: {
+      'メインボード': createDefaultBoardConfig(),
+    },
   };
 }

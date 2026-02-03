@@ -68,3 +68,23 @@ export function sendSetGridColumns(columns: number): void {
 export function sendRenameFile(cardId: string, oldPath: string, newFileName: string): void {
   postMessage({ command: 'renameFile', cardId, oldPath, newFileName });
 }
+
+/** ボード切替 */
+export function sendSwitchBoard(name: string): void {
+  postMessage({ command: 'switchBoard', name });
+}
+
+/** 新規ボード作成リクエスト */
+export function sendRequestNewBoard(): void {
+  postMessage({ command: 'requestNewBoard' });
+}
+
+/** ボード名変更リクエスト */
+export function sendRequestRenameBoard(): void {
+  postMessage({ command: 'requestRenameBoard' });
+}
+
+/** ボード削除リクエスト */
+export function sendRequestDeleteBoard(): void {
+  postMessage({ command: 'requestDeleteBoard' });
+}
