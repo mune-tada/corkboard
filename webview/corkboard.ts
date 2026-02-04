@@ -1,4 +1,4 @@
-import { CorkboardConfig, CardData, FilePreview, LabelDefinition } from './types';
+import { CorkboardConfig, CardData, FilePreview, LabelDefinition, FileRelinkUpdate } from './types';
 import { createCardElement, getSynopsisText, applyLabelColorVars, removeLabelColorVars } from './cardRenderer';
 import { initGridMode, destroyGridMode, updateCardNumbers } from './gridMode';
 import { initFreeformMode, destroyFreeformMode, commitFreeformOrder } from './freeformMode';
@@ -13,6 +13,7 @@ import {
   sendUpdateCard,
   sendUpdateSynopsis,
   sendRenameFile,
+  requestRelink,
   sendSwitchBoard,
   sendRequestNewBoard,
   sendRequestNewCard,
@@ -317,7 +318,8 @@ function showCardMenu(card: CardData, cardEl: HTMLElement): void {
   menu.className = 'card-context-menu';
 
   const menuItems = [
-    { label: '📄 ファイルを開く', action: () => openFile(card.filePath) },
+    { label: '📄 ファイルを開く', action: () => openFile(card.filePath, card.id) },
+    { label: '🔗 再リンク先を変更...', action: () => requestRelink(card.id, card.filePath) },
     { label: '🏷️ ラベルを設定...', action: () => showLabelPicker(card, cardEl) },
     { label: '📋 ステータスを設定...', action: () => showStatusPicker(card, cardEl) },
     { label: '✏️ 概要を編集', action: () => editSynopsis(card, cardEl) },
@@ -669,6 +671,52 @@ export function handleFileRenamed(cardId: string, oldPath: string, newPath: stri
   }
 }
 
+/** ファイル再リンク完了時のハンドラ */
+export function handleFileRelinked(updates: FileRelinkUpdate[]): void {
+  if (!currentConfig) return;
+
+  const container = document.getElementById('corkboard-container')!;
+
+  updates.forEach(update => {
+    const card = currentConfig!.cards.find(c => c.id === update.cardId);
+    if (!card) return;
+
+    const oldPath = update.oldPath;
+    const newPath = update.newPath;
+
+    // filePreviews を更新
+    if (filePreviews.has(oldPath)) {
+      filePreviews.delete(oldPath);
+    }
+    const preview = { ...update.preview, filePath: newPath };
+    filePreviews.set(newPath, preview);
+
+    card.filePath = newPath;
+
+    // DOM更新
+    const cardEl = container.querySelector<HTMLElement>(`[data-id="${update.cardId}"]`);
+    if (cardEl) {
+      cardEl.classList.remove('card-file-deleted');
+      const titleEl = cardEl.querySelector('.card-title');
+      if (titleEl) {
+        const newName = newPath.split('/').pop() || newPath;
+        titleEl.textContent = newName;
+        titleEl.setAttribute('title', newPath);
+      }
+      if (!card.synopsis) {
+        const synopsisEl = cardEl.querySelector('.card-synopsis');
+        if (synopsisEl) {
+          synopsisEl.textContent = getSynopsisText(card, preview);
+        }
+      }
+    }
+  });
+
+  if (currentConfig.viewMode === 'text') {
+    renderTextMode(container, currentConfig.cards, filePreviews);
+  }
+}
+
 /** ファイル全文受信ハンドラ（テキストモード用） */
 export function handleFileContents(contents: { filePath: string; content: string }[]): void {
   setFileContents(contents);
@@ -706,7 +754,7 @@ function setupKeyboardShortcuts(): void {
         break;
       case 'Enter':
         e.preventDefault();
-        openFile(card.filePath);
+        openFile(card.filePath, card.id);
         break;
     }
   });

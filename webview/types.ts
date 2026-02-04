@@ -37,6 +37,13 @@ export interface FileContent {
   content: string;
 }
 
+export interface FileRelinkUpdate {
+  cardId: string;
+  oldPath: string;
+  newPath: string;
+  preview: FilePreview;
+}
+
 /** VSCode Webview API */
 export interface VsCodeApi {
   postMessage(message: unknown): void;

@@ -119,13 +119,12 @@ export class CorkboardPanel {
   private async handleMessage(msg: WebviewToExtensionMessage): Promise<void> {
     switch (msg.command) {
       case 'openFile': {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) return;
-        const uri = vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, msg.filePath));
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+        await this.handleOpenFileRequest(msg.filePath, msg.cardId);
         break;
       }
+      case 'requestRelink':
+        await this.handleRelinkRequest(msg.cardId, msg.filePath);
+        break;
       case 'reorderCards':
         this.dataManager.reorderCards(msg.cardIds);
         break;
@@ -212,6 +211,202 @@ export class CorkboardPanel {
         break;
       }
     }
+  }
+
+  private resolveFileUri(filePath: string): vscode.Uri {
+    if (filePath.startsWith('file://')) {
+      return vscode.Uri.parse(filePath);
+    }
+    const normalized = path.normalize(filePath);
+    if (path.isAbsolute(normalized)) {
+      return vscode.Uri.file(normalized);
+    }
+    return vscode.Uri.file(path.join(this.workspaceRoot, normalized));
+  }
+
+  private async fileExists(uri: vscode.Uri): Promise<boolean> {
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async openDocument(uri: vscode.Uri): Promise<void> {
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      vscode.window.showErrorMessage(`ファイルを開けませんでした: ${errorMsg}`);
+    }
+  }
+
+  private async handleOpenFileRequest(filePath: string, _cardId?: string): Promise<void> {
+    const uri = this.resolveFileUri(filePath);
+    if (await this.fileExists(uri)) {
+      await this.openDocument(uri);
+      return;
+    }
+
+    // 存在しない場合は警告表示
+    this.panel.webview.postMessage({
+      command: 'fileDeleted',
+      filePath,
+    });
+
+    const newPath = await this.promptRelinkTarget(filePath, { forcePick: false });
+    if (!newPath) return;
+
+    const relinked = await this.applyRelink(filePath, newPath);
+    if (relinked) {
+      const newUri = this.resolveFileUri(newPath);
+      await this.openDocument(newUri);
+    }
+  }
+
+  private async handleRelinkRequest(_cardId: string, filePath: string): Promise<void> {
+    const newPath = await this.promptRelinkTarget(filePath, { forcePick: true });
+    if (!newPath) return;
+    await this.applyRelink(filePath, newPath);
+  }
+
+  private async promptRelinkTarget(
+    oldPath: string,
+    options: { forcePick: boolean }
+  ): Promise<string | undefined> {
+    const candidates = await this.findRelinkCandidates(oldPath, options.forcePick);
+
+    if (candidates.length === 0) {
+      return await this.showRelinkFilePicker();
+    }
+
+    if (candidates.length === 1 && !options.forcePick) {
+      return candidates[0];
+    }
+
+    return await this.showRelinkCandidatePicker(candidates);
+  }
+
+  private async findRelinkCandidates(oldPath: string, excludeCurrent: boolean): Promise<string[]> {
+    const baseName = path.basename(oldPath);
+    if (!baseName) return [];
+    const uris = await vscode.workspace.findFiles(`**/${baseName}`, '**/node_modules/**', 200);
+    let candidates = uris.map(uri => path.relative(this.workspaceRoot, uri.fsPath));
+    if (excludeCurrent) {
+      candidates = candidates.filter(c => c !== oldPath);
+    }
+    return this.sortRelinkCandidates(oldPath, candidates);
+  }
+
+  private sortRelinkCandidates(oldPath: string, candidates: string[]): string[] {
+    return [...candidates].sort((a, b) => {
+      const scoreDiff = this.scorePathSimilarity(oldPath, b) - this.scorePathSimilarity(oldPath, a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.localeCompare(b);
+    });
+  }
+
+  private scorePathSimilarity(oldPath: string, candidate: string): number {
+    const oldParts = oldPath.split(/[\\/]/).filter(Boolean);
+    const candParts = candidate.split(/[\\/]/).filter(Boolean);
+    const max = Math.min(oldParts.length, candParts.length);
+    let suffixMatches = 0;
+    for (let i = 1; i <= max; i++) {
+      if (oldParts[oldParts.length - i] === candParts[candParts.length - i]) {
+        suffixMatches += 1;
+      } else {
+        break;
+      }
+    }
+    const depthDiff = Math.abs(oldParts.length - candParts.length);
+    return suffixMatches * 2 - depthDiff;
+  }
+
+  private async showRelinkCandidatePicker(candidates: string[]): Promise<string | undefined> {
+    type RelinkPickItem = vscode.QuickPickItem & { value: string };
+    const items: RelinkPickItem[] = candidates.map((candidate, index) => ({
+      label: path.basename(candidate) || candidate,
+      description: candidate,
+      detail: index === 0 ? 'おすすめ' : undefined,
+      value: candidate,
+    }));
+
+    items.push({
+      label: '📂 ファイルを選択...',
+      description: '別のファイルを指定',
+      value: '__pick__',
+    });
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: '再リンク先のファイルを選択',
+    });
+
+    if (!selected) return;
+    if (selected.value === '__pick__') {
+      return await this.showRelinkFilePicker();
+    }
+    return selected.value;
+  }
+
+  private async showRelinkFilePicker(): Promise<string | undefined> {
+    const uris = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      defaultUri: vscode.Uri.file(this.workspaceRoot),
+      openLabel: 'ファイルを選択',
+    });
+
+    if (!uris || uris.length === 0) return;
+
+    const rel = path.relative(this.workspaceRoot, uris[0].fsPath);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      vscode.window.showWarningMessage('ワークスペース外のファイルは選択できません。');
+      return;
+    }
+
+    return rel;
+  }
+
+  private async applyRelink(oldPath: string, newPath: string): Promise<boolean> {
+    if (oldPath === newPath) return false;
+
+    const boards = this.dataManager.getBoardsContainingFilePath(oldPath);
+    if (boards.length === 0) return false;
+
+    let scope: 'active' | 'all' = 'active';
+    if (boards.length > 1) {
+      const pick = await vscode.window.showQuickPick([
+        { label: '全ボード', description: '同じファイル参照をすべて更新', value: 'all' as const },
+        { label: '現在のボードのみ', description: 'アクティブボードだけ更新', value: 'active' as const },
+      ], { placeHolder: '再リンクの更新範囲を選択' });
+      if (!pick) return false;
+      scope = pick.value;
+    }
+
+    const updatedCardIds = this.dataManager.updateFilePath(oldPath, newPath, scope);
+    if (updatedCardIds.length === 0) return false;
+
+    const preview = await this.fileScanner.getFilePreview(newPath);
+    const updates = updatedCardIds.map(cardId => ({
+      cardId,
+      oldPath,
+      newPath,
+      preview,
+    }));
+
+    this.panel.webview.postMessage({
+      command: 'fileRelinked',
+      updates,
+    });
+
+    if (this.dataManager.getConfig().viewMode === 'text') {
+      await this.sendFileContents();
+    }
+
+    return true;
   }
 
   private async showFilePicker(): Promise<void> {

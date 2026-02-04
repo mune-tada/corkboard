@@ -191,6 +191,44 @@ export class CorkboardDataManager {
     }
   }
 
+  /** 指定ファイルパスを含むボード名一覧を返す */
+  getBoardsContainingFilePath(filePath: string): string[] {
+    if (!this.rootConfig) return [];
+    return Object.entries(this.rootConfig.boards)
+      .filter(([, board]) => board.cards.some(c => c.filePath === filePath))
+      .map(([name]) => name);
+  }
+
+  /** ファイルパスを更新（スコープ指定） */
+  updateFilePath(oldPath: string, newPath: string, scope: 'active' | 'all'): string[] {
+    if (!this.rootConfig) return [];
+    const activeBoard = this.rootConfig.activeBoard;
+    const updatedCardIds: string[] = [];
+    let updated = false;
+
+    const targets = scope === 'all'
+      ? Object.entries(this.rootConfig.boards)
+      : [[activeBoard, this.getConfig()]] as Array<[string, CorkboardConfig]>;
+
+    for (const [boardName, board] of targets) {
+      board.cards.forEach(card => {
+        if (card.filePath === oldPath) {
+          card.filePath = newPath;
+          updated = true;
+          if (boardName === activeBoard) {
+            updatedCardIds.push(card.id);
+          }
+        }
+      });
+    }
+
+    if (updated) {
+      this.scheduleSave();
+    }
+
+    return updatedCardIds;
+  }
+
   /** カード順序の並べ替え */
   reorderCards(cardIds: string[]): void {
     const config = this.getConfig();
