@@ -2,6 +2,7 @@
 export interface CorkboardConfig {
   viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
+  cardHeight: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
   labelColors: LabelDefinition[];
@@ -20,6 +21,7 @@ export interface CorkboardConfigV1 {
   version: 1;
   viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
+  cardHeight?: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
   labelColors: LabelDefinition[];
@@ -79,9 +81,11 @@ export type WebviewToExtensionMessage =
   | { command: 'updateSynopsis'; cardId: string; synopsis: string }
   | { command: 'requestFilePicker' }
   | { command: 'setGridColumns'; columns: number }
+  | { command: 'setCardHeight'; height: 'small' | 'medium' | 'large' }
   | { command: 'renameFile'; cardId: string; oldPath: string; newFileName: string }
   | { command: 'switchBoard'; name: string }
   | { command: 'requestNewBoard' }
+  | { command: 'requestNewCard' }
   | { command: 'requestRenameBoard' }
   | { command: 'requestDeleteBoard' }
   | { command: 'requestFileContents' }
@@ -92,6 +96,7 @@ export function createDefaultBoardConfig(): CorkboardConfig {
   return {
     viewMode: 'grid',
     gridColumns: 4,
+    cardHeight: 'medium',
     cardSize: { width: 200, height: 150 },
     cards: [],
     labelColors: [

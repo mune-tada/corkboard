@@ -64,6 +64,11 @@ export function sendSetGridColumns(columns: number): void {
   postMessage({ command: 'setGridColumns', columns });
 }
 
+/** カード高さ変更 */
+export function sendSetCardHeight(height: 'small' | 'medium' | 'large'): void {
+  postMessage({ command: 'setCardHeight', height });
+}
+
 /** ファイルリネーム */
 export function sendRenameFile(cardId: string, oldPath: string, newFileName: string): void {
   postMessage({ command: 'renameFile', cardId, oldPath, newFileName });
@@ -77,6 +82,11 @@ export function sendSwitchBoard(name: string): void {
 /** 新規ボード作成リクエスト */
 export function sendRequestNewBoard(): void {
   postMessage({ command: 'requestNewBoard' });
+}
+
+/** 新規カード作成リクエスト */
+export function sendRequestNewCard(): void {
+  postMessage({ command: 'requestNewCard' });
 }
 
 /** ボード名変更リクエスト */

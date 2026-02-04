@@ -66,6 +66,11 @@
   background: var(--vscode-button-secondaryHoverBackground);
 }
 
+.height-btn.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
 .toolbar-label {
   display: flex;
   align-items: center;

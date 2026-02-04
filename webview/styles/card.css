@@ -9,7 +9,7 @@
   position: relative;
   cursor: default;
   transition: box-shadow 0.15s ease;
-  min-height: 120px;
+  min-height: var(--card-min-height, 120px);
   display: flex;
   flex-direction: column;
 }
@@ -115,7 +115,7 @@
   flex: 1;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: var(--card-line-clamp, 4);
   -webkit-box-orient: vertical;
   cursor: pointer;
 }

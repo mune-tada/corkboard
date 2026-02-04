@@ -8,12 +8,14 @@ import {
   requestFilePicker,
   sendSetViewMode,
   sendSetGridColumns,
+  sendSetCardHeight,
   sendRemoveCard,
   sendUpdateCard,
   sendUpdateSynopsis,
   sendRenameFile,
   sendSwitchBoard,
   sendRequestNewBoard,
+  sendRequestNewCard,
   sendRequestRenameBoard,
   sendRequestDeleteBoard,
   sendRequestFileContents,
@@ -24,6 +26,12 @@ let currentConfig: CorkboardConfig | null = null;
 let filePreviews: Map<string, FilePreview> = new Map();
 
 let selectedCardId: string | null = null;
+
+const cardHeightPresets = {
+  small: { minHeight: 80, lineClamp: 2, freeformMinHeight: 100 },
+  medium: { minHeight: 120, lineClamp: 4, freeformMinHeight: 150 },
+  large: { minHeight: 200, lineClamp: 8, freeformMinHeight: 220 },
+} as const;
 
 /** コルクボードを初期化 */
 export function initCorkboard(): void {
@@ -63,6 +71,8 @@ function renderCards(): void {
 
   emptyState.classList.add('hidden');
   container.classList.remove('hidden');
+
+  applyCardHeight();
 
   // 既存モードを破棄
   destroyGridMode();
@@ -155,6 +165,11 @@ function setupToolbar(): void {
     requestFilePicker();
   });
 
+  // 新規カードボタン
+  document.getElementById('btn-new-card')?.addEventListener('click', () => {
+    sendRequestNewCard();
+  });
+
   // モード切替ボタン
   document.querySelectorAll<HTMLElement>('.mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -218,6 +233,19 @@ function setupToolbar(): void {
       applyGridColumns();
     }
   });
+
+  // カード高さ変更
+  document.querySelectorAll<HTMLElement>('.height-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const height = btn.dataset.height as 'small' | 'medium' | 'large';
+      if (currentConfig && currentConfig.cardHeight !== height) {
+        currentConfig.cardHeight = height;
+        sendSetCardHeight(height);
+        applyCardHeight();
+        updateToolbarState();
+      }
+    });
+  });
 }
 
 /** ツールバーの状態を更新 */
@@ -237,12 +265,23 @@ function updateToolbarState(): void {
   const colsControl = document.getElementById('columns-control')!;
   colsControl.classList.toggle('hidden', currentConfig.viewMode !== 'grid');
 
+  // 高さコントロールの表示/非表示
+  const heightControl = document.getElementById('height-control')!;
+  heightControl.classList.toggle('hidden', currentConfig.viewMode === 'text');
+
   // テキストモードコントロールの表示/非表示
   const textControls = document.getElementById('text-controls')!;
   textControls.classList.toggle('hidden', currentConfig.viewMode !== 'text');
 
+  // 高さボタンのactive切替
+  const activeHeight = currentConfig.cardHeight ?? 'medium';
+  document.querySelectorAll<HTMLElement>('.height-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.height === activeHeight);
+  });
+
   updateColumnsDisplay();
   applyGridColumns();
+  applyCardHeight();
 }
 
 function updateColumnsDisplay(): void {
@@ -257,6 +296,16 @@ function applyGridColumns(): void {
   if (container && currentConfig) {
     container.style.setProperty('--grid-columns', String(currentConfig.gridColumns));
   }
+}
+
+function applyCardHeight(): void {
+  const container = document.getElementById('corkboard-container');
+  if (!container || !currentConfig) return;
+  const height = currentConfig.cardHeight ?? 'medium';
+  const preset = cardHeightPresets[height] ?? cardHeightPresets.medium;
+  container.style.setProperty('--card-min-height', `${preset.minHeight}px`);
+  container.style.setProperty('--card-line-clamp', String(preset.lineClamp));
+  container.style.setProperty('--card-min-height-freeform', `${preset.freeformMinHeight}px`);
 }
 
 /** カードのコンテキストメニューを表示 */

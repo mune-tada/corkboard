@@ -14,7 +14,7 @@
 #corkboard-container.freeform-mode .card {
   position: absolute;
   width: 220px;
-  min-height: 150px;
+  min-height: var(--card-min-height-freeform, 150px);
   will-change: transform;
 }
 

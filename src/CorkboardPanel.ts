@@ -156,6 +156,9 @@ export class CorkboardPanel {
       case 'setGridColumns':
         this.dataManager.setGridColumns(msg.columns);
         break;
+      case 'setCardHeight':
+        this.dataManager.setCardHeight(msg.height);
+        break;
       case 'renameFile':
         await this.handleRenameFile(msg.cardId, msg.oldPath, msg.newFileName);
         break;
@@ -172,6 +175,9 @@ export class CorkboardPanel {
         }
         break;
       }
+      case 'requestNewCard':
+        await this.handleNewCard();
+        break;
       case 'requestRenameBoard': {
         const currentName = this.dataManager.getActiveBoard();
         const newName = await vscode.window.showInputBox({ prompt: 'ボード名を変更', value: currentName });
@@ -352,6 +358,93 @@ export class CorkboardPanel {
     }
   }
 
+  /** 新規カード作成 */
+  private async handleNewCard(): Promise<void> {
+    const input = await vscode.window.showInputBox({
+      prompt: '新しいカードのファイル名を入力',
+      placeHolder: '例: ideas.md',
+      validateInput: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return 'ファイル名を入力してください。';
+        const sanitized = trimmed.replace(/[\\/]+/g, path.sep);
+        if (path.isAbsolute(sanitized)) return 'ワークスペース内の相対パスで入力してください。';
+        if (sanitized.endsWith(path.sep)) return 'ファイル名を入力してください。';
+        const segments = sanitized.split(path.sep);
+        if (segments.includes('..')) return 'ワークスペース外は指定できません。';
+        if (/[<>:"|?*\x00-\x1F]/.test(sanitized)) return '使用できない文字が含まれています。';
+        if (sanitized === '.' || sanitized === '') return 'ファイル名を入力してください。';
+        return null;
+      },
+    });
+
+    if (!input) return;
+
+    let filePath = input.trim().replace(/[\\/]+/g, path.sep);
+    const ext = path.extname(filePath);
+    if (!ext || ext === '.') {
+      filePath = filePath.replace(/\.$/, '') + '.md';
+    }
+    filePath = path.normalize(filePath);
+
+    const config = this.dataManager.getConfig();
+    const existingCard = config.cards.find(c => c.filePath === filePath);
+    const uri = vscode.Uri.file(path.join(this.workspaceRoot, filePath));
+
+    let exists = false;
+    try {
+      const stat = await vscode.workspace.fs.stat(uri);
+      exists = true;
+      if (stat.type & vscode.FileType.Directory) {
+        vscode.window.showErrorMessage('同名のフォルダが存在します。');
+        return;
+      }
+    } catch {
+      // not found
+    }
+
+    if (exists && existingCard) {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+      vscode.window.showInformationMessage('このファイルは既にカードに追加されています。');
+      return;
+    }
+
+    if (exists) {
+      const confirm = await vscode.window.showWarningMessage(
+        `ファイル「${filePath}」は既に存在します。カードに追加しますか？`,
+        { modal: true },
+        '追加'
+      );
+      if (confirm !== '追加') return;
+    } else {
+      try {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from('', 'utf-8'));
+      } catch (e: unknown) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        vscode.window.showErrorMessage(`ファイルの作成に失敗しました: ${errorMsg}`);
+        return;
+      }
+    }
+
+    if (existingCard) {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+      vscode.window.showInformationMessage('このファイルは既にカードに追加されています。');
+      return;
+    }
+
+    const card = this.dataManager.addCard(filePath);
+    const preview = await this.fileScanner.getFilePreview(filePath);
+    this.panel.webview.postMessage({
+      command: 'cardAdded',
+      card,
+      preview,
+    });
+
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+  }
+
   private getHtmlForWebview(): string {
     const webview = this.panel.webview;
     const nonce = getNonce();
@@ -381,6 +474,7 @@ export class CorkboardPanel {
       <button id="btn-delete-board" class="toolbar-btn-small" title="ボードを削除">✕</button>
       <div class="toolbar-separator"></div>
       <button id="btn-add-files" class="toolbar-btn" title="ファイルを追加">＋ ファイルを追加</button>
+      <button id="btn-new-card" class="toolbar-btn" title="新規カードを作成">＋ 新規カード</button>
       <div class="toolbar-separator"></div>
       <button id="btn-grid" class="toolbar-btn mode-btn active" data-mode="grid" title="グリッドモード">グリッド</button>
       <button id="btn-freeform" class="toolbar-btn mode-btn" data-mode="freeform" title="フリーフォームモード">フリーフォーム</button>
@@ -394,6 +488,12 @@ export class CorkboardPanel {
         <span id="col-count">4</span>
         <button id="btn-col-plus" class="toolbar-btn-small">＋</button>
       </label>
+      <label class="toolbar-label" id="height-control">
+        高さ:
+        <button class="toolbar-btn-small height-btn" data-height="small">S</button>
+        <button class="toolbar-btn-small height-btn active" data-height="medium">M</button>
+        <button class="toolbar-btn-small height-btn" data-height="large">L</button>
+      </label>
       <div id="text-controls" class="hidden">
         <button id="btn-text-synopsis" class="toolbar-btn text-sub-btn active" data-sub="synopsis" title="概要のみ">概要のみ</button>
         <button id="btn-text-full" class="toolbar-btn text-sub-btn" data-sub="full" title="本文＋概要">本文＋概要</button>
@@ -405,7 +505,7 @@ export class CorkboardPanel {
   <div id="corkboard-container"></div>
   <div id="empty-state" class="hidden">
     <p>カードがありません</p>
-    <p>「＋ ファイルを追加」ボタンでファイルをカードとして追加できます</p>
+    <p>「＋ ファイルを追加」または「＋ 新規カード」でカードを追加できます</p>
   </div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

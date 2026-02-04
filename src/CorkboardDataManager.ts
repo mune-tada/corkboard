@@ -25,11 +25,15 @@ export class CorkboardDataManager {
   /** v1 → v2 マイグレーション */
   private migrateV1toV2(v1: CorkboardConfigV1): CorkboardRootConfig {
     const { version: _, ...boardConfig } = v1;
+    const mergedConfig: CorkboardConfig = {
+      ...createDefaultBoardConfig(),
+      ...boardConfig,
+    };
     return {
       version: 2,
       activeBoard: 'メインボード',
       boards: {
-        'メインボード': boardConfig as CorkboardConfig,
+        'メインボード': mergedConfig,
       },
     };
   }
@@ -64,6 +68,16 @@ export class CorkboardDataManager {
         this.config = createDefaultBoardConfig();
         this.rootConfig.boards[this.rootConfig.activeBoard] = this.config;
       }
+    }
+
+    let updated = false;
+    Object.values(this.rootConfig.boards).forEach(board => {
+      if (this.ensureBoardDefaults(board)) {
+        updated = true;
+      }
+    });
+    if (updated) {
+      await this.saveImmediate();
     }
 
     this.startWatching();
@@ -201,6 +215,24 @@ export class CorkboardDataManager {
     const config = this.getConfig();
     config.gridColumns = columns;
     this.scheduleSave();
+  }
+
+  /** カード高さ変更 */
+  setCardHeight(height: 'small' | 'medium' | 'large'): void {
+    const config = this.getConfig();
+    config.cardHeight = height;
+    this.scheduleSave();
+  }
+
+  /** ボード設定の不足項目を補完 */
+  private ensureBoardDefaults(board: CorkboardConfig): boolean {
+    let updated = false;
+    const height = (board as { cardHeight?: string }).cardHeight;
+    if (height !== 'small' && height !== 'medium' && height !== 'large') {
+      board.cardHeight = 'medium';
+      updated = true;
+    }
+    return updated;
   }
 
   // ---- 保存・監視 ----

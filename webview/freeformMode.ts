@@ -26,7 +26,8 @@ export function initFreeformMode(container: HTMLElement): void {
   // カードに初期位置を設定（位置がない場合はグリッド風に配置）
   const cards = container.querySelectorAll<HTMLElement>('.card');
   const cardWidth = 220;
-  const cardHeight = 170;
+  const minHeightValue = parseFloat(getComputedStyle(container).getPropertyValue('--card-min-height-freeform'));
+  const cardHeight = Number.isFinite(minHeightValue) && minHeightValue > 0 ? minHeightValue : 150;
   const gap = 16;
   const cols = 4;
 

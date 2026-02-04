@@ -3,6 +3,7 @@
 export interface CorkboardConfig {
   viewMode: 'grid' | 'freeform' | 'text';
   gridColumns: number;
+  cardHeight: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
   labelColors: LabelDefinition[];
