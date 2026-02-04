@@ -8,8 +8,9 @@ let dragOffsetY = 0;
 let highestZ = 100;
 
 const SNAP_THRESHOLD = 8;
-const SMOOTHING = 0.25;
+const SMOOTHING = 1;
 const SNAP_EPSILON = 0.5;
+const DRAG_START_THRESHOLD = 3;
 
 // パフォーマンス最適化用キャッシュ
 let cachedContainerRect: DOMRect | null = null;
@@ -30,6 +31,9 @@ let snapTargetsY: number[] = [];
 let rafId = 0;
 let dragContainer: HTMLElement | null = null;
 let scrollHandler: (() => void) | null = null;
+let dragStarted = false;
+let dragStartClientX = 0;
+let dragStartClientY = 0;
 
 /** フリーフォームモードを初期化 */
 export function initFreeformMode(container: HTMLElement): void {
@@ -51,7 +55,7 @@ export function initFreeformMode(container: HTMLElement): void {
     const posX = card.dataset.posX;
     const posY = card.dataset.posY;
 
-    if (posX && posY) {
+    if (posX !== undefined && posY !== undefined && posX !== '' && posY !== '') {
       card.style.left = `${posX}px`;
       card.style.top = `${posY}px`;
     } else {
@@ -79,6 +83,7 @@ export function initFreeformMode(container: HTMLElement): void {
 function onMouseDown(e: MouseEvent): void {
   const target = e.target as HTMLElement;
   if (target.closest('.card-connect-handle')) return;
+  if (target.closest('button, input, textarea, select')) return;
   // カードヘッダーからドラッグ開始
   const header = target.closest('.card-header');
   if (!header) return;
@@ -91,8 +96,11 @@ function onMouseDown(e: MouseEvent): void {
 
   e.preventDefault();
   isDragging = true;
+  dragStarted = false;
   dragTarget = card;
   dragContainer = container;
+  dragStartClientX = e.clientX;
+  dragStartClientY = e.clientY;
 
   // containerRectをキャッシュ（mousemoveで毎回計算しない）
   cachedContainerRect = container.getBoundingClientRect();
@@ -119,11 +127,6 @@ function onMouseDown(e: MouseEvent): void {
   snapTargetsX = snapTargets.x;
   snapTargetsY = snapTargets.y;
 
-  // 最前面に持ってくる
-  highestZ++;
-  card.style.zIndex = String(highestZ);
-  card.classList.add('card-dragging');
-
   // ドラッグ中のスクロール対応
   scrollHandler = () => {
     cachedScrollLeft = container.scrollLeft;
@@ -134,6 +137,20 @@ function onMouseDown(e: MouseEvent): void {
 
 function onMouseMove(e: MouseEvent): void {
   if (!isDragging || !dragTarget || !cachedContainerRect) return;
+
+  if (!dragStarted) {
+    const dx = e.clientX - dragStartClientX;
+    const dy = e.clientY - dragStartClientY;
+    if (Math.hypot(dx, dy) < DRAG_START_THRESHOLD) {
+      return;
+    }
+    dragStarted = true;
+    // 最前面に持ってくる
+    highestZ++;
+    dragTarget.style.zIndex = String(highestZ);
+    dragTarget.classList.add('card-dragging');
+    dragContainer?.classList.add('freeform-dragging');
+  }
 
   const x = e.clientX - cachedContainerRect.left - dragOffsetX + cachedScrollLeft;
   const y = e.clientY - cachedContainerRect.top - dragOffsetY + cachedScrollTop;
@@ -156,6 +173,22 @@ function onMouseMove(e: MouseEvent): void {
 function onMouseUp(_e: MouseEvent): void {
   if (!isDragging || !dragTarget) return;
 
+  if (!dragStarted) {
+    if (dragContainer && scrollHandler) {
+      dragContainer.removeEventListener('scroll', scrollHandler);
+    }
+    dragContainer?.classList.remove('freeform-dragging');
+    isDragging = false;
+    dragStarted = false;
+    dragTarget = null;
+    dragContainer = null;
+    cachedContainerRect = null;
+    snapTargetsX = [];
+    snapTargetsY = [];
+    scrollHandler = null;
+    return;
+  }
+
   // 保留中のrAFをキャンセル
   if (rafId) {
     cancelAnimationFrame(rafId);
@@ -170,6 +203,7 @@ function onMouseUp(_e: MouseEvent): void {
   dragTarget.dataset.posY = String(targetY);
 
   dragTarget.classList.remove('card-dragging');
+  dragContainer?.classList.remove('freeform-dragging');
   updateLinkPositions();
 
   // 位置をExtensionに送信
@@ -184,6 +218,7 @@ function onMouseUp(_e: MouseEvent): void {
   }
 
   isDragging = false;
+  dragStarted = false;
   dragTarget = null;
   dragContainer = null;
   cachedContainerRect = null;
@@ -206,7 +241,9 @@ export function destroyFreeformMode(container: HTMLElement): void {
   if (dragContainer && scrollHandler) {
     dragContainer.removeEventListener('scroll', scrollHandler);
   }
+  container.classList.remove('freeform-dragging');
   isDragging = false;
+  dragStarted = false;
   dragTarget = null;
   dragContainer = null;
   cachedContainerRect = null;

@@ -23,3 +23,8 @@
   will-change: transform;
   pointer-events: none;
 }
+
+#corkboard-container.freeform-dragging,
+#corkboard-container.freeform-dragging * {
+  cursor: grabbing !important;
+}

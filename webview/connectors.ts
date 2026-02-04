@@ -15,6 +15,7 @@ type LinkElements = {
 };
 
 const LINK_LABEL_PLACEHOLDER = 'コメントなし';
+const RECONNECT_HIT_RADIUS = 14;
 
 let hooks: LinkHooks | null = null;
 let containerEl: HTMLElement | null = null;
@@ -111,6 +112,9 @@ export function renderLinks(links: LinkData[]): void {
       e.stopPropagation();
       setSelectedLink(link.id);
     });
+    path.addEventListener('mousedown', (e) => {
+      if (maybeStartReconnectFromPath(link.id, e)) return;
+    });
     path.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       startLabelEdit(link.id, true);
@@ -203,6 +207,50 @@ export function updateLinkPositions(): void {
       elements.labelDiv.textContent = displayLabel;
     }
   }
+}
+
+function maybeStartReconnectFromPath(linkId: string, e: MouseEvent): boolean {
+  if (!containerEl) return false;
+  if (e.button !== 0) return false;
+  if (editingLinkId) return false;
+  const link = currentLinks.find(l => l.id === linkId);
+  if (!link) return false;
+  const endpoints = getLinkEndpoints(link);
+  if (!endpoints) return false;
+
+  const containerRect = containerEl.getBoundingClientRect();
+  const x = e.clientX - containerRect.left + containerEl.scrollLeft;
+  const y = e.clientY - containerRect.top + containerEl.scrollTop;
+  const distFrom = Math.hypot(x - endpoints.from.x, y - endpoints.from.y);
+  const distTo = Math.hypot(x - endpoints.to.x, y - endpoints.to.y);
+
+  if (distFrom > RECONNECT_HIT_RADIUS && distTo > RECONNECT_HIT_RADIUS) return false;
+  const side: 'from' | 'to' = distFrom <= distTo ? 'from' : 'to';
+
+  e.preventDefault();
+  e.stopPropagation();
+  setSelectedLink(linkId);
+  startReconnect(linkId, side, e.clientX, e.clientY);
+  return true;
+}
+
+function getLinkEndpoints(link: LinkData): { from: { x: number; y: number }; to: { x: number; y: number } } | null {
+  if (!containerEl) return null;
+  const fromCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${link.fromId}"]`);
+  const toCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${link.toId}"]`);
+  if (!fromCard || !toCard) return null;
+
+  const containerRect = containerEl.getBoundingClientRect();
+  const scrollLeft = containerEl.scrollLeft;
+  const scrollTop = containerEl.scrollTop;
+  const fromRect = fromCard.getBoundingClientRect();
+  const toRect = toCard.getBoundingClientRect();
+  const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
+  const toBox = rectToBox(toRect, containerRect, scrollLeft, scrollTop);
+  const autoAnchors = pickAnchors(fromBox, toBox);
+  const from = link.fromAnchor ? getAnchorPoint(fromBox, link.fromAnchor) : autoAnchors.from;
+  const to = link.toAnchor ? getAnchorPoint(toBox, link.toAnchor) : autoAnchors.to;
+  return { from, to };
 }
 
 export function clearLinkSelection(): void {
@@ -662,6 +710,8 @@ function startLabelEdit(linkId: string, selectAll: boolean): void {
   if (selectAll) {
     input.select();
   }
+  input.addEventListener('input', () => updateLinkPositions());
+  requestAnimationFrame(() => updateLinkPositions());
 
   const commit = () => {
     if (editingLinkId !== linkId) return;
