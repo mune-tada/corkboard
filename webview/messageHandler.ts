@@ -15,8 +15,8 @@ export function postMessage(message: unknown): void {
 }
 
 /** ファイルを開く */
-export function openFile(filePath: string): void {
-  postMessage({ command: 'openFile', filePath });
+export function openFile(filePath: string, cardId?: string): void {
+  postMessage({ command: 'openFile', filePath, cardId });
 }
 
 /** カード順序を送信 */
@@ -87,6 +87,11 @@ export function sendSetCardHeight(height: 'small' | 'medium' | 'large'): void {
 /** ファイルリネーム */
 export function sendRenameFile(cardId: string, oldPath: string, newFileName: string): void {
   postMessage({ command: 'renameFile', cardId, oldPath, newFileName });
+}
+
+/** ファイル再リンク */
+export function requestRelink(cardId: string, filePath: string): void {
+  postMessage({ command: 'requestRelink', cardId, filePath });
 }
 
 /** ボード切替 */

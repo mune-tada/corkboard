@@ -68,12 +68,21 @@ export interface FileContent {
   content: string;
 }
 
+/** ファイル再リンク更新 */
+export interface FileRelinkUpdate {
+  cardId: string;
+  oldPath: string;
+  newPath: string;
+  preview: FilePreview;
+}
+
 /** Extension → Webview メッセージ */
 export type ExtensionToWebviewMessage =
   | { command: 'loadCorkboard'; data: CorkboardConfig; filePreviews: FilePreview[] }
   | { command: 'cardAdded'; card: CardData; preview: FilePreview }
   | { command: 'fileChanged'; filePath: string; preview: FilePreview }
   | { command: 'fileDeleted'; filePath: string }
+  | { command: 'fileRelinked'; updates: FileRelinkUpdate[] }
   | { command: 'configReloaded'; data: CorkboardConfig; filePreviews: FilePreview[] }
   | { command: 'fileRenamed'; cardId: string; oldPath: string; newPath: string }
   | { command: 'boardList'; boards: string[]; activeBoard: string }
@@ -81,7 +90,8 @@ export type ExtensionToWebviewMessage =
 
 /** Webview → Extension メッセージ */
 export type WebviewToExtensionMessage =
-  | { command: 'openFile'; filePath: string }
+  | { command: 'openFile'; filePath: string; cardId?: string }
+  | { command: 'requestRelink'; cardId: string; filePath: string }
   | { command: 'reorderCards'; cardIds: string[] }
   | { command: 'moveCard'; cardId: string; position: { x: number; y: number } }
   | { command: 'updateCard'; cardId: string; changes: Partial<CardData> }
