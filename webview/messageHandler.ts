@@ -123,3 +123,13 @@ export function sendRequestFileContents(): void {
 export function sendExportMarkdown(): void {
   postMessage({ command: 'exportMarkdown' });
 }
+
+/** 元に戻す */
+export function sendUndo(): void {
+  postMessage({ command: 'undo' });
+}
+
+/** やり直し */
+export function sendRedo(): void {
+  postMessage({ command: 'redo' });
+}

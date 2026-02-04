@@ -9,6 +9,10 @@ export class CorkboardDataManager {
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
   private configWatcher: vscode.FileSystemWatcher | null = null;
   private onConfigChangedCallback: (() => void) | null = null;
+  private undoStack: CorkboardRootConfig[] = [];
+  private redoStack: CorkboardRootConfig[] = [];
+  private isRestoring = false;
+  private readonly maxHistory = 100;
 
   constructor(private workspaceRoot: string) {}
 
@@ -80,6 +84,7 @@ export class CorkboardDataManager {
       await this.saveImmediate();
     }
 
+    this.resetHistory();
     this.startWatching();
     return this.config;
   }
@@ -90,6 +95,13 @@ export class CorkboardDataManager {
       throw new Error('Config not loaded. Call load() first.');
     }
     return this.config;
+  }
+
+  getRootConfigSnapshot(): CorkboardRootConfig {
+    if (!this.rootConfig) {
+      throw new Error('Config not loaded. Call load() first.');
+    }
+    return this.cloneRootConfig(this.rootConfig);
   }
 
   // ---- ボード管理 ----
@@ -109,6 +121,10 @@ export class CorkboardDataManager {
   switchBoard(name: string): CorkboardConfig {
     if (!this.rootConfig) throw new Error('Not loaded');
     if (!this.rootConfig.boards[name]) throw new Error(`Board not found: ${name}`);
+    if (this.rootConfig.activeBoard === name) {
+      return this.rootConfig.boards[name];
+    }
+    this.pushHistory();
     this.rootConfig.activeBoard = name;
     this.config = this.rootConfig.boards[name];
     this.scheduleSave();
@@ -119,6 +135,7 @@ export class CorkboardDataManager {
   createBoard(name: string): void {
     if (!this.rootConfig) throw new Error('Not loaded');
     if (this.rootConfig.boards[name]) return;
+    this.pushHistory();
     this.rootConfig.boards[name] = createDefaultBoardConfig();
     this.scheduleSave();
   }
@@ -128,6 +145,7 @@ export class CorkboardDataManager {
     if (!this.rootConfig) throw new Error('Not loaded');
     const board = this.rootConfig.boards[oldName];
     if (!board || this.rootConfig.boards[newName]) return;
+    this.pushHistory();
     this.rootConfig.boards[newName] = board;
     delete this.rootConfig.boards[oldName];
     if (this.rootConfig.activeBoard === oldName) {
@@ -140,6 +158,8 @@ export class CorkboardDataManager {
   deleteBoard(name: string): void {
     if (!this.rootConfig) throw new Error('Not loaded');
     if (Object.keys(this.rootConfig.boards).length <= 1) return;
+    if (!this.rootConfig.boards[name]) return;
+    this.pushHistory();
     delete this.rootConfig.boards[name];
     if (this.rootConfig.activeBoard === name) {
       this.rootConfig.activeBoard = Object.keys(this.rootConfig.boards)[0];
@@ -157,6 +177,7 @@ export class CorkboardDataManager {
     if (existing) {
       return existing;
     }
+    this.pushHistory();
     const card: CardData = {
       id: generateId(),
       filePath,
@@ -174,6 +195,9 @@ export class CorkboardDataManager {
   /** カードを削除 */
   removeCard(cardId: string): void {
     const config = this.getConfig();
+    const hasCard = config.cards.some(c => c.id === cardId);
+    if (!hasCard) return;
+    this.pushHistory();
     config.cards = config.cards.filter(c => c.id !== cardId);
     config.links = config.links.filter(l => l.fromId !== cardId && l.toId !== cardId);
     config.cards
@@ -187,6 +211,10 @@ export class CorkboardDataManager {
     const config = this.getConfig();
     const card = config.cards.find(c => c.id === cardId);
     if (card) {
+      const entries = Object.entries(changes) as [keyof CardData, CardData[keyof CardData]][];
+      const hasChange = entries.some(([key, value]) => card[key] !== value);
+      if (!hasChange) return;
+      this.pushHistory();
       Object.assign(card, changes);
       this.scheduleSave();
     }
@@ -195,6 +223,7 @@ export class CorkboardDataManager {
   /** リンクを追加 */
   addLink(link: LinkData): void {
     const config = this.getConfig();
+    this.pushHistory();
     config.links.push(link);
     this.scheduleSave();
   }
@@ -204,6 +233,10 @@ export class CorkboardDataManager {
     const config = this.getConfig();
     const link = config.links.find(l => l.id === linkId);
     if (link) {
+      const entries = Object.entries(changes) as [keyof LinkData, LinkData[keyof LinkData]][];
+      const hasChange = entries.some(([key, value]) => link[key] !== value);
+      if (!hasChange) return;
+      this.pushHistory();
       Object.assign(link, changes);
       this.scheduleSave();
     }
@@ -212,6 +245,9 @@ export class CorkboardDataManager {
   /** リンクを削除 */
   removeLink(linkId: string): void {
     const config = this.getConfig();
+    const hasLink = config.links.some(l => l.id === linkId);
+    if (!hasLink) return;
+    this.pushHistory();
     config.links = config.links.filter(l => l.id !== linkId);
     this.scheduleSave();
   }
@@ -219,6 +255,7 @@ export class CorkboardDataManager {
   /** カード順序の並べ替え */
   reorderCards(cardIds: string[]): void {
     const config = this.getConfig();
+    this.pushHistory();
     cardIds.forEach((id, index) => {
       const card = config.cards.find(c => c.id === id);
       if (card) {
@@ -231,6 +268,8 @@ export class CorkboardDataManager {
   /** 表示モード変更 */
   setViewMode(mode: 'grid' | 'freeform' | 'text'): void {
     const config = this.getConfig();
+    if (config.viewMode === mode) return;
+    this.pushHistory();
     config.viewMode = mode;
     this.scheduleSave();
   }
@@ -238,6 +277,8 @@ export class CorkboardDataManager {
   /** グリッドカラム数変更 */
   setGridColumns(columns: number): void {
     const config = this.getConfig();
+    if (config.gridColumns === columns) return;
+    this.pushHistory();
     config.gridColumns = columns;
     this.scheduleSave();
   }
@@ -245,8 +286,34 @@ export class CorkboardDataManager {
   /** カード高さ変更 */
   setCardHeight(height: 'small' | 'medium' | 'large'): void {
     const config = this.getConfig();
+    if (config.cardHeight === height) return;
+    this.pushHistory();
     config.cardHeight = height;
     this.scheduleSave();
+  }
+
+  async undo(): Promise<boolean> {
+    if (!this.rootConfig || this.undoStack.length === 0) return false;
+    const current = this.cloneRootConfig(this.rootConfig);
+    const snapshot = this.undoStack.pop()!;
+    this.redoStack.push(current);
+    this.isRestoring = true;
+    this.applySnapshot(snapshot);
+    this.isRestoring = false;
+    await this.saveImmediate();
+    return true;
+  }
+
+  async redo(): Promise<boolean> {
+    if (!this.rootConfig || this.redoStack.length === 0) return false;
+    const current = this.cloneRootConfig(this.rootConfig);
+    const snapshot = this.redoStack.pop()!;
+    this.undoStack.push(current);
+    this.isRestoring = true;
+    this.applySnapshot(snapshot);
+    this.isRestoring = false;
+    await this.saveImmediate();
+    return true;
   }
 
   /** ボード設定の不足項目を補完 */
@@ -293,11 +360,19 @@ export class CorkboardDataManager {
       const uri = vscode.Uri.file(this.configPath);
       try {
         const data = await vscode.workspace.fs.readFile(uri);
-        const raw = JSON.parse(Buffer.from(data).toString('utf-8'));
+        const text = Buffer.from(data).toString('utf-8');
+        if (this.rootConfig) {
+          const current = JSON.stringify(this.rootConfig, null, 2);
+          if (text === current) {
+            return;
+          }
+        }
+        const raw = JSON.parse(text);
         if (raw.version === 2) {
           this.rootConfig = raw as CorkboardRootConfig;
           this.config = this.rootConfig.boards[this.rootConfig.activeBoard];
         }
+        this.resetHistory();
         this.onConfigChangedCallback?.();
       } catch {
         // ignore parse errors
@@ -311,5 +386,39 @@ export class CorkboardDataManager {
       clearTimeout(this.saveTimeout);
     }
     this.configWatcher?.dispose();
+  }
+
+  private resetHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+  }
+
+  private pushHistory(): void {
+    if (!this.rootConfig || this.isRestoring) return;
+    this.undoStack.push(this.cloneRootConfig(this.rootConfig));
+    if (this.undoStack.length > this.maxHistory) {
+      this.undoStack.shift();
+    }
+    this.redoStack = [];
+  }
+
+  private cloneRootConfig(source: CorkboardRootConfig): CorkboardRootConfig {
+    return JSON.parse(JSON.stringify(source)) as CorkboardRootConfig;
+  }
+
+  private applySnapshot(snapshot: CorkboardRootConfig): void {
+    this.rootConfig = snapshot;
+    const active = this.rootConfig.activeBoard;
+    let board = this.rootConfig.boards[active];
+    if (!board) {
+      const fallback = Object.keys(this.rootConfig.boards)[0];
+      this.rootConfig.activeBoard = fallback || 'メインボード';
+      board = this.rootConfig.boards[this.rootConfig.activeBoard];
+      if (!board) {
+        board = createDefaultBoardConfig();
+        this.rootConfig.boards[this.rootConfig.activeBoard] = board;
+      }
+    }
+    this.config = board;
   }
 }

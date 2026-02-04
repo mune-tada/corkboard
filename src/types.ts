@@ -102,7 +102,9 @@ export type WebviewToExtensionMessage =
   | { command: 'requestRenameBoard' }
   | { command: 'requestDeleteBoard' }
   | { command: 'requestFileContents' }
-  | { command: 'exportMarkdown' };
+  | { command: 'exportMarkdown' }
+  | { command: 'undo' }
+  | { command: 'redo' };
 
 /** デフォルトのボード設定を生成 */
 export function createDefaultBoardConfig(): CorkboardConfig {
