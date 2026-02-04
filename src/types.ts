@@ -41,12 +41,17 @@ export interface CardData {
   position: { x: number; y: number } | null;
 }
 
+export type LinkAnchor = 'top' | 'right' | 'bottom' | 'left';
+
 /** カード間リンク */
 export interface LinkData {
   id: string;
   fromId: string;
   toId: string;
   label: string;
+  fromAnchor?: LinkAnchor | null;
+  toAnchor?: LinkAnchor | null;
+  color?: string | null;
 }
 
 /** ラベル定義 */

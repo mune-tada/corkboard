@@ -162,6 +162,7 @@ function renderCards(): void {
     initFreeformMode(container);
     initConnectorLayer(container, {
       getLinks: () => currentConfig?.links ?? [],
+      getLabelColors: () => currentConfig?.labelColors ?? [],
       onAddLink: addLink,
       onUpdateLink: updateLink,
       onRemoveLink: removeLink,

@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "activeBoard": "メインボード",
+  "boards": {
+    "メインボード": {
+      "viewMode": "grid",
+      "gridColumns": 4,
+      "cardSize": {
+        "width": 200,
+        "height": 150
+      },
+      "cards": [
+        {
+          "id": "a1e3f4ad-a809-4e8d-8b5e-6dc9bd8b1eb6",
+          "filePath": "CLAUDE.md",
+          "synopsis": null,
+          "label": null,
+          "status": null,
+          "order": 0,
+          "position": null
+        }
+      ],
+      "labelColors": [
+        {
+          "name": "赤",
+          "color": "#e74c3c"
+        },
+        {
+          "name": "オレンジ",
+          "color": "#e67e22"
+        },
+        {
+          "name": "黄",
+          "color": "#f1c40f"
+        },
+        {
+          "name": "緑",
+          "color": "#2ecc71"
+        },
+        {
+          "name": "青",
+          "color": "#3498db"
+        },
+        {
+          "name": "紫",
+          "color": "#9b59b6"
+        }
+      ],
+      "statusOptions": [
+        "未着手",
+        "下書き",
+        "推敲中",
+        "完成"
+      ]
+    }
+  }
+}

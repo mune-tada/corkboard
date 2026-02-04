@@ -13,10 +13,10 @@
 }
 
 #corkboard-container .link-path {
-  stroke: var(--vscode-editorLink-activeForeground, #4aa3ff);
+  stroke: var(--link-color, var(--vscode-editorLink-activeForeground, #4aa3ff));
   stroke-width: 2;
   fill: none;
-  color: var(--vscode-editorLink-activeForeground, #4aa3ff);
+  color: var(--link-color, var(--vscode-editorLink-activeForeground, #4aa3ff));
   pointer-events: stroke;
 }
 
@@ -27,7 +27,8 @@
 }
 
 #corkboard-container .link-temp {
-  stroke: var(--vscode-editorLink-activeForeground, #4aa3ff);
+  stroke: var(--link-color, var(--vscode-editorLink-activeForeground, #4aa3ff));
+  color: var(--link-color, var(--vscode-editorLink-activeForeground, #4aa3ff));
   stroke-width: 2;
   fill: none;
   stroke-dasharray: 4 4;
@@ -41,7 +42,7 @@
 #corkboard-container .link-label {
   background: var(--vscode-editorWidget-background);
   color: var(--vscode-foreground);
-  border: 1px solid var(--vscode-panel-border);
+  border: 1px solid var(--link-color, var(--vscode-panel-border));
   border-radius: 12px;
   font-size: 11px;
   font-family: var(--vscode-font-family);
@@ -94,7 +95,8 @@
   cursor: crosshair;
 }
 
-#corkboard-container.freeform-mode.connect-mode .card-connect-handle {
+#corkboard-container.freeform-mode.connect-mode .card-connect-handle,
+#corkboard-container.freeform-mode.reconnect-mode .card-connect-handle {
   --handle-scale: 1;
   opacity: 1;
   pointer-events: auto;
@@ -118,6 +120,11 @@
 .card-connect-handle[data-handle="right"] {
   top: 50%;
   left: calc(100% - var(--handle-offset));
+}
+
+.card-connect-handle.card-connect-handle-target {
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+  transform: translate(-50%, -50%) scale(1.2);
 }
 
 .card-connect-target {

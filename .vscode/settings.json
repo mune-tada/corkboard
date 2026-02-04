@@ -1,0 +1,8 @@
+{
+  "git.ignoredRepositories": [
+    "/private/tmp/corkboard-relink-worktree",
+    "/Users/yamaguchimunetada/.codex/worktrees/23e7/corkboard",
+    "/Users/yamaguchimunetada/.codex/worktrees/23e7/corkboard-freeform-snap",
+    "/Users/yamaguchimunetada/Documents/dev/vscode/corkboard/.worktrees/undo-shortcuts"
+  ]
+}

@@ -1,7 +1,8 @@
-import { LinkData } from './types';
+import { LabelDefinition, LinkAnchor, LinkData } from './types';
 
 type LinkHooks = {
   getLinks: () => LinkData[];
+  getLabelColors: () => LabelDefinition[];
   onAddLink: (link: LinkData) => void;
   onUpdateLink: (linkId: string, changes: Partial<LinkData>) => void;
   onRemoveLink: (linkId: string) => void;
@@ -26,9 +27,17 @@ let linkElementMap: Map<string, LinkElements> = new Map();
 let connectMode = false;
 let isConnecting = false;
 let connectFromId: string | null = null;
+let connectFromAnchor: LinkAnchor | null = null;
+let isReconnecting = false;
+let reconnectLinkId: string | null = null;
+let reconnectSide: 'from' | 'to' | null = null;
+let reconnectFixedId: string | null = null;
+let reconnectFixedAnchor: LinkAnchor | null = null;
+let reconnectColor: string | null = null;
 let selectedLinkId: string | null = null;
 let editingLinkId: string | null = null;
 let attachDone = false;
+let linkContextMenu: HTMLElement | null = null;
 
 export function initConnectorLayer(container: HTMLElement, linkHooks: LinkHooks): void {
   containerEl = container;
@@ -50,6 +59,8 @@ export function setConnectorVisible(visible: boolean): void {
   if (!visible) {
     clearLinkSelection();
     cancelConnecting();
+    cancelReconnecting();
+    closeLinkContextMenu();
   }
 }
 
@@ -60,11 +71,13 @@ export function setConnectMode(isOn: boolean): void {
   }
   if (!isOn) {
     cancelConnecting();
+    cancelReconnecting();
   }
 }
 
 export function renderLinks(links: LinkData[]): void {
   if (!linkGroup) return;
+  closeLinkContextMenu();
   currentLinks = links;
   const prevSelected = selectedLinkId;
   updateSvgSize();
@@ -86,6 +99,7 @@ export function renderLinks(links: LinkData[]): void {
     const labelDiv = document.createElement('div');
     labelDiv.className = 'link-label';
     labelDiv.dataset.linkId = link.id;
+    applyLinkColorStyles(path, labelDiv, link.color ?? null);
     const displayLabel = normalizeLinkLabel(link.label);
     labelDiv.textContent = displayLabel;
     if (!displayLabel) {
@@ -101,6 +115,12 @@ export function renderLinks(links: LinkData[]): void {
       e.stopPropagation();
       startLabelEdit(link.id, true);
     });
+    path.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedLink(link.id);
+      openLinkContextMenu(link.id, e.clientX, e.clientY);
+    });
     labelDiv.addEventListener('click', (e) => {
       e.stopPropagation();
       setSelectedLink(link.id);
@@ -108,6 +128,12 @@ export function renderLinks(links: LinkData[]): void {
     labelDiv.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       startLabelEdit(link.id, true);
+    });
+    labelDiv.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedLink(link.id);
+      openLinkContextMenu(link.id, e.clientX, e.clientY);
     });
 
     linkGroup.appendChild(path);
@@ -147,7 +173,9 @@ export function updateLinkPositions(): void {
 
     const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
     const toBox = rectToBox(toRect, containerRect, scrollLeft, scrollTop);
-    const { from, to } = pickAnchors(fromBox, toBox);
+    const autoAnchors = pickAnchors(fromBox, toBox);
+    const from = link.fromAnchor ? getAnchorPoint(fromBox, link.fromAnchor) : autoAnchors.from;
+    const to = link.toAnchor ? getAnchorPoint(toBox, link.toAnchor) : autoAnchors.to;
 
     const d = `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
     elements.path.setAttribute('d', d);
@@ -231,11 +259,16 @@ function onContainerMouseDown(e: MouseEvent): void {
   if (!handle) return;
   const card = handle.closest<HTMLElement>('.card');
   if (!card || !card.dataset.id) return;
+  const anchor = getHandleAnchor(handle);
+  if (!anchor) return;
 
   e.preventDefault();
   e.stopPropagation();
+  closeLinkContextMenu();
+  cancelReconnecting();
 
   connectFromId = card.dataset.id;
+  connectFromAnchor = anchor;
   isConnecting = true;
   ensureTempPath();
 
@@ -247,7 +280,7 @@ function onContainerMouseDown(e: MouseEvent): void {
 function onConnectMouseMove(e: MouseEvent): void {
   if (!isConnecting) return;
   updateTempPath(e.clientX, e.clientY);
-  updateTargetHighlight(e.clientX, e.clientY);
+  updateHandleHighlight(e.clientX, e.clientY);
 }
 
 function onConnectMouseUp(e: MouseEvent): void {
@@ -255,18 +288,22 @@ function onConnectMouseUp(e: MouseEvent): void {
   document.removeEventListener('mousemove', onConnectMouseMove);
   document.removeEventListener('mouseup', onConnectMouseUp);
 
-  const targetCard = getCardFromPoint(e.clientX, e.clientY);
-  const targetId = targetCard?.dataset.id || null;
+  const handleHit = getHandleFromPoint(e.clientX, e.clientY);
+  const targetId = handleHit?.card.dataset.id || null;
+  const targetAnchor = handleHit?.anchor ?? null;
   const fromId = connectFromId;
+  const fromAnchor = connectFromAnchor;
 
   cancelConnecting();
 
-  if (fromId && targetId && fromId !== targetId && hooks) {
+  if (fromId && targetId && fromAnchor && targetAnchor && fromId !== targetId && hooks) {
     const link: LinkData = {
       id: generateId(),
       fromId,
       toId: targetId,
       label: '',
+      fromAnchor,
+      toAnchor: targetAnchor,
     };
     hooks.onAddLink(link);
     requestAnimationFrame(() => {
@@ -277,54 +314,98 @@ function onConnectMouseUp(e: MouseEvent): void {
 }
 
 function updateTempPath(clientX: number, clientY: number): void {
-  if (!containerEl || !tempPath || !connectFromId) return;
-  const fromCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${connectFromId}"]`);
-  if (!fromCard) return;
+  if (!containerEl || !tempPath) return;
   const containerRect = containerEl.getBoundingClientRect();
   const scrollLeft = containerEl.scrollLeft;
   const scrollTop = containerEl.scrollTop;
-  const fromRect = fromCard.getBoundingClientRect();
-  const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
   const toPoint = {
     x: clientX - containerRect.left + scrollLeft,
     y: clientY - containerRect.top + scrollTop,
   };
-  const { from } = pickAnchors(fromBox, {
+  const pointBox = {
     left: toPoint.x,
     right: toPoint.x,
     top: toPoint.y,
     bottom: toPoint.y,
     cx: toPoint.x,
     cy: toPoint.y,
-  });
-  tempPath.setAttribute('d', `M ${from.x} ${from.y} L ${toPoint.x} ${toPoint.y}`);
+  };
+
+  let fromPoint: { x: number; y: number } | null = null;
+
+  if (isReconnecting && reconnectFixedId) {
+    const fixedCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${reconnectFixedId}"]`);
+    if (!fixedCard) return;
+    const fixedRect = fixedCard.getBoundingClientRect();
+    const fixedBox = rectToBox(fixedRect, containerRect, scrollLeft, scrollTop);
+    if (reconnectFixedAnchor) {
+      fromPoint = getAnchorPoint(fixedBox, reconnectFixedAnchor);
+    } else {
+      const { from } = pickAnchors(fixedBox, pointBox);
+      fromPoint = from;
+    }
+    if (reconnectColor) {
+      tempPath.style.setProperty('--link-color', reconnectColor);
+    } else {
+      tempPath.style.removeProperty('--link-color');
+    }
+  } else if (connectFromId) {
+    const fromCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${connectFromId}"]`);
+    if (!fromCard) return;
+    const fromRect = fromCard.getBoundingClientRect();
+    const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
+    if (connectFromAnchor) {
+      fromPoint = getAnchorPoint(fromBox, connectFromAnchor);
+    } else {
+      const { from } = pickAnchors(fromBox, pointBox);
+      fromPoint = from;
+    }
+    tempPath.style.removeProperty('--link-color');
+  }
+
+  if (!fromPoint) return;
+  tempPath.setAttribute('d', `M ${fromPoint.x} ${fromPoint.y} L ${toPoint.x} ${toPoint.y}`);
   tempPath.setAttribute('marker-end', 'url(#connector-arrow)');
 }
 
-function updateTargetHighlight(clientX: number, clientY: number): void {
+function updateHandleHighlight(clientX: number, clientY: number): void {
   if (!containerEl) return;
-  containerEl.querySelectorAll('.card-connect-target').forEach(el => el.classList.remove('card-connect-target'));
-  const card = getCardFromPoint(clientX, clientY);
-  if (card && card.dataset.id !== connectFromId) {
-    card.classList.add('card-connect-target');
-  }
+  clearHandleHighlight();
+  const hit = getHandleFromPoint(clientX, clientY);
+  if (!hit) return;
+  if (isConnecting && connectFromId && hit.card.dataset.id === connectFromId) return;
+  if (isReconnecting && reconnectFixedId && hit.card.dataset.id === reconnectFixedId) return;
+  hit.handle.classList.add('card-connect-handle-target');
 }
 
-function getCardFromPoint(clientX: number, clientY: number): HTMLElement | null {
+function clearHandleHighlight(): void {
+  if (!containerEl) return;
+  containerEl.querySelectorAll('.card-connect-handle-target').forEach(el => el.classList.remove('card-connect-handle-target'));
+}
+
+function getHandleFromPoint(clientX: number, clientY: number): { handle: HTMLElement; card: HTMLElement; anchor: LinkAnchor } | null {
   const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
   if (!el) return null;
-  return el.closest<HTMLElement>('.card');
+  const handle = el.closest<HTMLElement>('.card-connect-handle');
+  if (!handle) return null;
+  const card = handle.closest<HTMLElement>('.card');
+  if (!card || !card.dataset.id) return null;
+  const anchor = getHandleAnchor(handle);
+  if (!anchor) return null;
+  return { handle, card, anchor };
 }
 
 function cancelConnecting(): void {
   isConnecting = false;
   connectFromId = null;
+  connectFromAnchor = null;
   if (tempPath) {
     tempPath.setAttribute('d', '');
   }
   if (containerEl) {
     containerEl.querySelectorAll('.card-connect-target').forEach(el => el.classList.remove('card-connect-target'));
   }
+  clearHandleHighlight();
 }
 
 function ensureTempPath(): void {
@@ -336,14 +417,206 @@ function ensureTempPath(): void {
   }
 }
 
+function setReconnectMode(isOn: boolean): void {
+  if (containerEl) {
+    containerEl.classList.toggle('reconnect-mode', isOn);
+  }
+}
+
+function startReconnect(linkId: string, side: 'from' | 'to', clientX: number, clientY: number): void {
+  if (!hooks || !containerEl) return;
+  const link = currentLinks.find(l => l.id === linkId);
+  if (!link) return;
+  cancelConnecting();
+  cancelReconnecting();
+  isReconnecting = true;
+  reconnectLinkId = linkId;
+  reconnectSide = side;
+  if (side === 'from') {
+    reconnectFixedId = link.toId;
+    reconnectFixedAnchor = link.toAnchor ?? null;
+  } else {
+    reconnectFixedId = link.fromId;
+    reconnectFixedAnchor = link.fromAnchor ?? null;
+  }
+  reconnectColor = link.color ?? null;
+  setReconnectMode(true);
+  ensureTempPath();
+  updateTempPath(clientX, clientY);
+  updateHandleHighlight(clientX, clientY);
+  document.addEventListener('mousemove', onReconnectMouseMove);
+  document.addEventListener('mouseup', onReconnectMouseUp);
+}
+
+function onReconnectMouseMove(e: MouseEvent): void {
+  if (!isReconnecting) return;
+  updateTempPath(e.clientX, e.clientY);
+  updateHandleHighlight(e.clientX, e.clientY);
+}
+
+function onReconnectMouseUp(e: MouseEvent): void {
+  if (!isReconnecting) return;
+  document.removeEventListener('mousemove', onReconnectMouseMove);
+  document.removeEventListener('mouseup', onReconnectMouseUp);
+
+  const hit = getHandleFromPoint(e.clientX, e.clientY);
+  const targetId = hit?.card.dataset.id || null;
+  const targetAnchor = hit?.anchor ?? null;
+  const linkId = reconnectLinkId;
+  const side = reconnectSide;
+  const fixedId = reconnectFixedId;
+
+  cancelReconnecting();
+
+  if (!hooks || !linkId || !side || !targetId || !targetAnchor) return;
+  if (fixedId && targetId === fixedId) return;
+
+  const changes: Partial<LinkData> = side === 'from'
+    ? { fromId: targetId, fromAnchor: targetAnchor }
+    : { toId: targetId, toAnchor: targetAnchor };
+
+  hooks.onUpdateLink(linkId, changes);
+  requestAnimationFrame(() => setSelectedLink(linkId));
+}
+
+function cancelReconnecting(): void {
+  if (isReconnecting) {
+    document.removeEventListener('mousemove', onReconnectMouseMove);
+    document.removeEventListener('mouseup', onReconnectMouseUp);
+  }
+  isReconnecting = false;
+  reconnectLinkId = null;
+  reconnectSide = null;
+  reconnectFixedId = null;
+  reconnectFixedAnchor = null;
+  reconnectColor = null;
+  if (tempPath) {
+    tempPath.setAttribute('d', '');
+    tempPath.style.removeProperty('--link-color');
+  }
+  clearHandleHighlight();
+  setReconnectMode(false);
+}
+
+function openLinkContextMenu(linkId: string, clientX: number, clientY: number): void {
+  if (!hooks) return;
+  closeLinkContextMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'card-context-menu link-context-menu';
+
+  const addMenuItem = (label: string, action: () => void): void => {
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.textContent = label;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeLinkContextMenu();
+      action();
+    });
+    menu.appendChild(item);
+  };
+
+  const addMenuItemWithEvent = (label: string, action: (event: MouseEvent) => void): void => {
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.textContent = label;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeLinkContextMenu();
+      action(e as MouseEvent);
+    });
+    menu.appendChild(item);
+  };
+
+  addMenuItem('✏️ コメントを編集', () => startLabelEdit(linkId, true));
+
+  const colors = hooks.getLabelColors();
+  const noneItem = document.createElement('div');
+  noneItem.className = 'menu-item';
+  noneItem.textContent = '🎨 色: （なし）';
+  noneItem.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeLinkContextMenu();
+    hooks?.onUpdateLink(linkId, { color: null });
+  });
+  menu.appendChild(noneItem);
+
+  colors.forEach((colorDef) => {
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.innerHTML = `<span class="label-swatch" style="background:${colorDef.color}"></span> 🎨 色: ${colorDef.name}`;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeLinkContextMenu();
+      hooks?.onUpdateLink(linkId, { color: colorDef.color });
+    });
+    menu.appendChild(item);
+  });
+
+  addMenuItemWithEvent('🔗 始点を外して再接続', (e) => startReconnect(linkId, 'from', e.clientX, e.clientY));
+  addMenuItemWithEvent('🔗 終点を外して再接続', (e) => startReconnect(linkId, 'to', e.clientX, e.clientY));
+  addMenuItem('🗑️ 削除', () => hooks?.onRemoveLink(linkId));
+
+  positionContextMenu(menu, clientX, clientY);
+  linkContextMenu = menu;
+
+  const closeMenu = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) {
+      closeLinkContextMenu();
+      document.removeEventListener('click', closeMenu);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', closeMenu), 0);
+}
+
+function closeLinkContextMenu(): void {
+  if (linkContextMenu) {
+    linkContextMenu.remove();
+    linkContextMenu = null;
+  }
+}
+
+function positionContextMenu(menu: HTMLElement, clientX: number, clientY: number): void {
+  const margin = 8;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  menu.style.position = 'fixed';
+  menu.style.visibility = 'hidden';
+  menu.style.left = `${clientX}px`;
+  menu.style.top = `${clientY}px`;
+  document.body.appendChild(menu);
+
+  const rect = menu.getBoundingClientRect();
+  let left = clientX;
+  let top = clientY;
+
+  if (left + rect.width > viewportWidth - margin) {
+    left = viewportWidth - rect.width - margin;
+  }
+  if (top + rect.height > viewportHeight - margin) {
+    top = viewportHeight - rect.height - margin;
+  }
+
+  left = Math.min(Math.max(left, margin), Math.max(margin, viewportWidth - rect.width - margin));
+  top = Math.min(Math.max(top, margin), Math.max(margin, viewportHeight - rect.height - margin));
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.visibility = 'visible';
+}
+
 function onContainerClick(e: MouseEvent): void {
   const target = e.target as HTMLElement;
+  if (target.closest('.link-context-menu')) return;
   if (target.closest('.link-label') || target.closest('.link-path') || target.closest('.card-connect-handle')) return;
   clearLinkSelection();
 }
 
 function onDocumentClick(e: MouseEvent): void {
   const target = e.target as HTMLElement;
+  if (target.closest('.link-context-menu')) return;
   if (target.closest('.link-label') || target.closest('.link-path')) return;
   if (target.closest('.card-connect-handle')) return;
   clearLinkSelection();
@@ -415,6 +688,24 @@ function startLabelEdit(linkId: string, selectAll: boolean): void {
   });
 }
 
+function applyLinkColorStyles(path: SVGPathElement, labelDiv: HTMLDivElement, color: string | null): void {
+  if (color) {
+    path.style.setProperty('--link-color', color);
+    labelDiv.style.setProperty('--link-color', color);
+  } else {
+    path.style.removeProperty('--link-color');
+    labelDiv.style.removeProperty('--link-color');
+  }
+}
+
+function getHandleAnchor(handle: HTMLElement): LinkAnchor | null {
+  const raw = handle.dataset.handle;
+  if (raw === 'top' || raw === 'right' || raw === 'bottom' || raw === 'left') {
+    return raw;
+  }
+  return null;
+}
+
 function rectToBox(
   rect: DOMRect,
   containerRect: DOMRect,
@@ -428,6 +719,23 @@ function rectToBox(
   const cx = left + rect.width / 2;
   const cy = top + rect.height / 2;
   return { left, right, top, bottom, cx, cy };
+}
+
+function getAnchorPoint(
+  box: { left: number; right: number; top: number; bottom: number; cx: number; cy: number },
+  anchor: LinkAnchor
+): { x: number; y: number } {
+  switch (anchor) {
+    case 'top':
+      return { x: box.cx, y: box.top };
+    case 'right':
+      return { x: box.right, y: box.cy };
+    case 'bottom':
+      return { x: box.cx, y: box.bottom };
+    case 'left':
+      return { x: box.left, y: box.cy };
+  }
+  return { x: box.cx, y: box.cy };
 }
 
 function pickAnchors(
