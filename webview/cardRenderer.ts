@@ -11,7 +11,7 @@ export function getSynopsisText(card: CardData, preview: FilePreview | undefined
   if (card.synopsis) return card.synopsis;
   if (preview?.frontmatterSynopsis) return preview.frontmatterSynopsis;
   if (preview?.firstLines) return preview.firstLines;
-  return '（概要なし）';
+  return '';
 }
 
 /** カードのDOM要素を生成 */
