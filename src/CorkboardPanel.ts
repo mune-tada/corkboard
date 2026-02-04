@@ -119,11 +119,31 @@ export class CorkboardPanel {
   private async handleMessage(msg: WebviewToExtensionMessage): Promise<void> {
     switch (msg.command) {
       case 'openFile': {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) return;
-        const uri = vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, msg.filePath));
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+        const filePath = msg.filePath;
+        const uri = filePath.startsWith('file://')
+          ? vscode.Uri.parse(filePath)
+          : vscode.Uri.file(
+              path.isAbsolute(filePath) ? filePath : path.join(this.workspaceRoot, filePath)
+            );
+
+        try {
+          await vscode.workspace.fs.stat(uri);
+        } catch {
+          vscode.window.showWarningMessage(`ファイルが見つかりません: ${filePath}`);
+          this.panel.webview.postMessage({
+            command: 'fileDeleted',
+            filePath,
+          });
+          break;
+        }
+
+        try {
+          const doc = await vscode.workspace.openTextDocument(uri);
+          await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+        } catch (e: unknown) {
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          vscode.window.showErrorMessage(`ファイルを開けませんでした: ${errorMsg}`);
+        }
         break;
       }
       case 'reorderCards':
