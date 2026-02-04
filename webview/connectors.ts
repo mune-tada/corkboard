@@ -13,6 +13,8 @@ type LinkElements = {
   labelDiv: HTMLDivElement;
 };
 
+const LINK_LABEL_PLACEHOLDER = 'コメントなし';
+
 let hooks: LinkHooks | null = null;
 let containerEl: HTMLElement | null = null;
 let svgEl: SVGSVGElement | null = null;
@@ -84,12 +86,20 @@ export function renderLinks(links: LinkData[]): void {
     const labelDiv = document.createElement('div');
     labelDiv.className = 'link-label';
     labelDiv.dataset.linkId = link.id;
-    labelDiv.textContent = link.label || 'コメントなし';
+    const displayLabel = normalizeLinkLabel(link.label);
+    labelDiv.textContent = displayLabel;
+    if (!displayLabel) {
+      labelFo.style.display = 'none';
+    }
     labelFo.appendChild(labelDiv);
 
     path.addEventListener('click', (e) => {
       e.stopPropagation();
       setSelectedLink(link.id);
+    });
+    path.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startLabelEdit(link.id, true);
     });
     labelDiv.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -143,18 +153,26 @@ export function updateLinkPositions(): void {
     elements.path.setAttribute('d', d);
 
     const isEditing = editingLinkId === link.id && elements.labelDiv.querySelector('input');
+    const displayLabel = normalizeLinkLabel(link.label);
     const liveText = isEditing
       ? (elements.labelDiv.querySelector('input') as HTMLInputElement | null)?.value || ''
-      : link.label || 'コメントなし';
-    const labelText = liveText || (isEditing ? '' : 'コメントなし');
-    const size = measureLabel(labelText || 'コメントなし');
+      : displayLabel;
+    if (!isEditing && !displayLabel) {
+      elements.labelFo.style.display = 'none';
+      elements.labelFo.setAttribute('width', '0');
+      elements.labelFo.setAttribute('height', '0');
+      elements.labelDiv.textContent = '';
+      continue;
+    }
+    elements.labelFo.style.display = '';
+    const size = measureLabel(liveText);
     const midpoint = getLabelPoint(from, to);
     elements.labelFo.setAttribute('x', String(midpoint.x - size.width / 2));
     elements.labelFo.setAttribute('y', String(midpoint.y - size.height / 2));
     elements.labelFo.setAttribute('width', String(size.width));
     elements.labelFo.setAttribute('height', String(size.height));
     if (!isEditing) {
-      elements.labelDiv.textContent = labelText || 'コメントなし';
+      elements.labelDiv.textContent = displayLabel;
     }
   }
 }
@@ -248,7 +266,7 @@ function onConnectMouseUp(e: MouseEvent): void {
       id: generateId(),
       fromId,
       toId: targetId,
-      label: 'コメントなし',
+      label: '',
     };
     hooks.onAddLink(link);
     requestAnimationFrame(() => {
@@ -359,11 +377,12 @@ function startLabelEdit(linkId: string, selectAll: boolean): void {
   if (!elements) return;
   if (editingLinkId) return;
   editingLinkId = linkId;
-  const currentText = elements.labelDiv.textContent || '';
+  elements.labelFo.style.display = '';
+  const currentText = normalizeLinkLabel(elements.labelDiv.textContent || '');
   const input = document.createElement('input');
   input.className = 'link-label-input';
   input.type = 'text';
-  input.value = currentText === 'コメントなし' ? '' : currentText;
+  input.value = currentText;
   elements.labelDiv.innerHTML = '';
   elements.labelDiv.appendChild(input);
   input.focus();
@@ -373,7 +392,7 @@ function startLabelEdit(linkId: string, selectAll: boolean): void {
 
   const commit = () => {
     if (editingLinkId !== linkId) return;
-    const nextValue = input.value.trim() || 'コメントなし';
+    const nextValue = input.value.trim();
     editingLinkId = null;
     hooks.onUpdateLink(linkId, { label: nextValue });
   };
@@ -456,6 +475,13 @@ function measureLabel(text: string): { width: number; height: number } {
   const base = text.length;
   const width = Math.min(220, Math.max(80, base * 7 + 36));
   return { width, height: 26 };
+}
+
+function normalizeLinkLabel(label: string | null | undefined): string {
+  if (!label) return '';
+  const trimmed = label.trim();
+  if (!trimmed || trimmed === LINK_LABEL_PLACEHOLDER) return '';
+  return trimmed;
 }
 
 function generateId(): string {
