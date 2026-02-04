@@ -46,6 +46,12 @@ export function createCardElement(
     <div class="card-footer">
       ${card.status ? `<span class="card-status-badge">${escapeHtml(card.status)}</span>` : ''}
     </div>
+    <div class="card-connect-handles" aria-hidden="true">
+      <div class="card-connect-handle" data-handle="top"></div>
+      <div class="card-connect-handle" data-handle="right"></div>
+      <div class="card-connect-handle" data-handle="bottom"></div>
+      <div class="card-connect-handle" data-handle="left"></div>
+    </div>
   `;
 
   return el;

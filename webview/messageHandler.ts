@@ -1,4 +1,4 @@
-import { VsCodeApi } from './types';
+import { VsCodeApi, LinkData } from './types';
 
 let vscodeApi: VsCodeApi;
 
@@ -37,6 +37,21 @@ export function sendUpdateCard(cardId: string, changes: Record<string, unknown>)
 /** カード削除 */
 export function sendRemoveCard(cardId: string): void {
   postMessage({ command: 'removeCard', cardId });
+}
+
+/** リンク追加 */
+export function sendAddLink(link: LinkData): void {
+  postMessage({ command: 'addLink', link });
+}
+
+/** リンク更新 */
+export function sendUpdateLink(linkId: string, changes: Partial<LinkData>): void {
+  postMessage({ command: 'updateLink', linkId, changes });
+}
+
+/** リンク削除 */
+export function sendRemoveLink(linkId: string): void {
+  postMessage({ command: 'removeLink', linkId });
 }
 
 /** 表示モード変更 */

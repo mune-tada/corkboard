@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { CorkboardConfig, CorkboardRootConfig, CorkboardConfigV1, CardData, createDefaultConfig, createDefaultBoardConfig } from './types';
+import { CorkboardConfig, CorkboardRootConfig, CorkboardConfigV1, CardData, LinkData, createDefaultConfig, createDefaultBoardConfig } from './types';
 import { generateId } from './utils';
 
 export class CorkboardDataManager {
@@ -175,6 +175,7 @@ export class CorkboardDataManager {
   removeCard(cardId: string): void {
     const config = this.getConfig();
     config.cards = config.cards.filter(c => c.id !== cardId);
+    config.links = config.links.filter(l => l.fromId !== cardId && l.toId !== cardId);
     config.cards
       .sort((a, b) => a.order - b.order)
       .forEach((c, i) => { c.order = i; });
@@ -189,6 +190,30 @@ export class CorkboardDataManager {
       Object.assign(card, changes);
       this.scheduleSave();
     }
+  }
+
+  /** リンクを追加 */
+  addLink(link: LinkData): void {
+    const config = this.getConfig();
+    config.links.push(link);
+    this.scheduleSave();
+  }
+
+  /** リンクを更新 */
+  updateLink(linkId: string, changes: Partial<LinkData>): void {
+    const config = this.getConfig();
+    const link = config.links.find(l => l.id === linkId);
+    if (link) {
+      Object.assign(link, changes);
+      this.scheduleSave();
+    }
+  }
+
+  /** リンクを削除 */
+  removeLink(linkId: string): void {
+    const config = this.getConfig();
+    config.links = config.links.filter(l => l.id !== linkId);
+    this.scheduleSave();
   }
 
   /** カード順序の並べ替え */
@@ -230,6 +255,10 @@ export class CorkboardDataManager {
     const height = (board as { cardHeight?: string }).cardHeight;
     if (height !== 'small' && height !== 'medium' && height !== 'large') {
       board.cardHeight = 'medium';
+      updated = true;
+    }
+    if (!Array.isArray((board as { links?: LinkData[] }).links)) {
+      board.links = [];
       updated = true;
     }
     return updated;

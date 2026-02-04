@@ -1,4 +1,5 @@
 import { sendMoveCard, sendCommitFreeformOrder } from './messageHandler';
+import { updateLinkPositions } from './connectors';
 
 let isDragging = false;
 let dragTarget: HTMLElement | null = null;
@@ -17,6 +18,7 @@ let pendingY = 0;
 let rafId = 0;
 let dragContainer: HTMLElement | null = null;
 let scrollHandler: (() => void) | null = null;
+let snapGrid = 24;
 
 /** フリーフォームモードを初期化 */
 export function initFreeformMode(container: HTMLElement): void {
@@ -65,6 +67,7 @@ export function initFreeformMode(container: HTMLElement): void {
 
 function onMouseDown(e: MouseEvent): void {
   const target = e.target as HTMLElement;
+  if (target.closest('.card-connect-handle')) return;
   // カードヘッダーからドラッグ開始
   const header = target.closest('.card-header');
   if (!header) return;
@@ -84,6 +87,8 @@ function onMouseDown(e: MouseEvent): void {
   cachedContainerRect = container.getBoundingClientRect();
   cachedScrollLeft = container.scrollLeft;
   cachedScrollTop = container.scrollTop;
+  const gridValue = parseFloat(getComputedStyle(container).getPropertyValue('--freeform-grid-size'));
+  snapGrid = Number.isFinite(gridValue) && gridValue > 0 ? gridValue : 24;
 
   // 開始位置を記録
   startLeft = parseFloat(card.style.left || '0');
@@ -124,10 +129,16 @@ function onMouseMove(e: MouseEvent): void {
     pendingX = Math.max(0, x);
     pendingY = Math.max(0, y);
 
+    if (!e.altKey && snapGrid > 1) {
+      pendingX = Math.round(pendingX / snapGrid) * snapGrid;
+      pendingY = Math.round(pendingY / snapGrid) * snapGrid;
+    }
+
     // ドラッグ中はtransformで移動（GPUコンポジット、レイアウト再計算なし）
     const dx = pendingX - startLeft;
     const dy = pendingY - startTop;
     dragTarget.style.transform = `translate(${dx}px, ${dy}px)`;
+    updateLinkPositions();
   });
 }
 
@@ -148,6 +159,7 @@ function onMouseUp(_e: MouseEvent): void {
   dragTarget.dataset.posY = String(pendingY);
 
   dragTarget.classList.remove('card-dragging');
+  updateLinkPositions();
 
   // 位置をExtensionに送信
   const cardId = dragTarget.dataset.id;

@@ -138,6 +138,15 @@ export class CorkboardPanel {
       case 'removeCard':
         this.dataManager.removeCard(msg.cardId);
         break;
+      case 'addLink':
+        this.dataManager.addLink(msg.link);
+        break;
+      case 'updateLink':
+        this.dataManager.updateLink(msg.linkId, msg.changes);
+        break;
+      case 'removeLink':
+        this.dataManager.removeLink(msg.linkId);
+        break;
       case 'setViewMode':
         this.dataManager.setViewMode(msg.mode);
         if (msg.mode === 'text') {
@@ -482,6 +491,7 @@ export class CorkboardPanel {
     </div>
     <div class="toolbar-right">
       <button id="btn-commit" class="toolbar-btn hidden" title="現在の配置から順序を確定">順序を確定</button>
+      <button id="btn-connect" class="toolbar-btn hidden" title="カードを接続">コネクト</button>
       <label class="toolbar-label" id="columns-control">
         カラム:
         <button id="btn-col-minus" class="toolbar-btn-small">−</button>

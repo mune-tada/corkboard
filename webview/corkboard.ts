@@ -1,8 +1,9 @@
-import { CorkboardConfig, CardData, FilePreview, LabelDefinition } from './types';
+import { CorkboardConfig, CardData, FilePreview, LinkData } from './types';
 import { createCardElement, getSynopsisText, applyLabelColorVars, removeLabelColorVars } from './cardRenderer';
 import { initGridMode, destroyGridMode, updateCardNumbers } from './gridMode';
 import { initFreeformMode, destroyFreeformMode, commitFreeformOrder } from './freeformMode';
 import { renderTextMode, destroyTextMode, setFileContents, setTextSubMode, getTextSubMode } from './textMode';
+import { initConnectorLayer, renderLinks, setConnectMode, setConnectorVisible, clearLinkSelection } from './connectors';
 import {
   openFile,
   requestFilePicker,
@@ -20,12 +21,16 @@ import {
   sendRequestDeleteBoard,
   sendRequestFileContents,
   sendExportMarkdown,
+  sendAddLink,
+  sendUpdateLink,
+  sendRemoveLink,
 } from './messageHandler';
 
 let currentConfig: CorkboardConfig | null = null;
 let filePreviews: Map<string, FilePreview> = new Map();
 
 let selectedCardId: string | null = null;
+let isConnectMode = false;
 
 const cardHeightPresets = {
   small: { minHeight: 80, lineClamp: 2, freeformMinHeight: 100 },
@@ -42,6 +47,9 @@ export function initCorkboard(): void {
 /** コルクボードのデータを読み込んで描画 */
 export function loadCorkboard(config: CorkboardConfig, previews: FilePreview[]): void {
   currentConfig = config;
+  if (!currentConfig.links) {
+    currentConfig.links = [];
+  }
   filePreviews.clear();
   previews.forEach(p => filePreviews.set(p.filePath, p));
 
@@ -72,12 +80,18 @@ function renderCards(): void {
   emptyState.classList.add('hidden');
   container.classList.remove('hidden');
 
+  if (currentConfig.viewMode !== 'freeform') {
+    isConnectMode = false;
+  }
+
   applyCardHeight();
 
   // 既存モードを破棄
   destroyGridMode();
   destroyFreeformMode(container);
   destroyTextMode(container);
+  setConnectorVisible(false);
+  setConnectMode(false);
 
   container.innerHTML = '';
 
@@ -104,8 +118,13 @@ function renderCards(): void {
     cardEl.addEventListener('click', (e) => {
       // メニューボタンやテキストエリアのクリックは除外
       const target = e.target as HTMLElement;
-      if (target.closest('.card-menu-btn') || target.closest('.synopsis-edit')) return;
+      if (
+        target.closest('.card-menu-btn') ||
+        target.closest('.synopsis-edit') ||
+        target.closest('.card-connect-handle')
+      ) return;
 
+      clearLinkSelection();
       // 前の選択を解除
       container.querySelectorAll('.card-selected').forEach(el => el.classList.remove('card-selected'));
       cardEl.classList.add('card-selected');
@@ -138,6 +157,15 @@ function renderCards(): void {
     initGridMode(container);
   } else {
     initFreeformMode(container);
+    initConnectorLayer(container, {
+      getLinks: () => currentConfig?.links ?? [],
+      onAddLink: addLink,
+      onUpdateLink: updateLink,
+      onRemoveLink: removeLink,
+    });
+    setConnectorVisible(true);
+    renderLinks(currentConfig.links);
+    setConnectMode(isConnectMode);
   }
 }
 

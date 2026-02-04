@@ -5,6 +5,7 @@ export interface CorkboardConfig {
   cardHeight: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
+  links: LinkData[];
   labelColors: LabelDefinition[];
   statusOptions: string[];
 }
@@ -24,6 +25,7 @@ export interface CorkboardConfigV1 {
   cardHeight?: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
+  links?: LinkData[];
   labelColors: LabelDefinition[];
   statusOptions: string[];
 }
@@ -37,6 +39,14 @@ export interface CardData {
   status: string | null;
   order: number;
   position: { x: number; y: number } | null;
+}
+
+/** カード間リンク */
+export interface LinkData {
+  id: string;
+  fromId: string;
+  toId: string;
+  label: string;
 }
 
 /** ラベル定義 */
@@ -76,6 +86,9 @@ export type WebviewToExtensionMessage =
   | { command: 'moveCard'; cardId: string; position: { x: number; y: number } }
   | { command: 'updateCard'; cardId: string; changes: Partial<CardData> }
   | { command: 'removeCard'; cardId: string }
+  | { command: 'addLink'; link: LinkData }
+  | { command: 'updateLink'; linkId: string; changes: Partial<LinkData> }
+  | { command: 'removeLink'; linkId: string }
   | { command: 'setViewMode'; mode: 'grid' | 'freeform' | 'text' }
   | { command: 'commitFreeformOrder'; cardIds: string[] }
   | { command: 'updateSynopsis'; cardId: string; synopsis: string }
@@ -99,6 +112,7 @@ export function createDefaultBoardConfig(): CorkboardConfig {
     cardHeight: 'medium',
     cardSize: { width: 200, height: 150 },
     cards: [],
+    links: [],
     labelColors: [
       { name: '赤', color: '#e74c3c' },
       { name: 'オレンジ', color: '#e67e22' },

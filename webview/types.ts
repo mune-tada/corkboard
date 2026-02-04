@@ -6,6 +6,7 @@ export interface CorkboardConfig {
   cardHeight: 'small' | 'medium' | 'large';
   cardSize: { width: number; height: number };
   cards: CardData[];
+  links: LinkData[];
   labelColors: LabelDefinition[];
   statusOptions: string[];
 }
@@ -18,6 +19,13 @@ export interface CardData {
   status: string | null;
   order: number;
   position: { x: number; y: number } | null;
+}
+
+export interface LinkData {
+  id: string;
+  fromId: string;
+  toId: string;
+  label: string;
 }
 
 export interface LabelDefinition {
