@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { CorkboardDataManager } from './CorkboardDataManager';
 import { FileScanner } from './FileScanner';
-import { WebviewToExtensionMessage } from './types';
+import { CorkboardRootConfig, WebviewToExtensionMessage } from './types';
 import { getNonce } from './utils';
 
 export class CorkboardPanel {
@@ -222,6 +222,26 @@ export class CorkboardPanel {
       case 'exportMarkdown':
         await this.handleExportMarkdown();
         break;
+      case 'undo': {
+        const before = this.dataManager.getRootConfigSnapshot();
+        const changed = await this.dataManager.undo();
+        if (changed) {
+          const after = this.dataManager.getRootConfigSnapshot();
+          await this.reconcileFileRenames(before, after);
+          await this.sendFullStateAndBoardList();
+        }
+        break;
+      }
+      case 'redo': {
+        const before = this.dataManager.getRootConfigSnapshot();
+        const changed = await this.dataManager.redo();
+        if (changed) {
+          const after = this.dataManager.getRootConfigSnapshot();
+          await this.reconcileFileRenames(before, after);
+          await this.sendFullStateAndBoardList();
+        }
+        break;
+      }
       case 'requestDeleteBoard': {
         const boards = this.dataManager.getBoardNames();
         if (boards.length <= 1) {
@@ -563,6 +583,60 @@ export class CorkboardPanel {
     } catch (e: unknown) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       vscode.window.showErrorMessage(`ファイル名の変更に失敗しました: ${errorMsg}`);
+    }
+  }
+
+  private async reconcileFileRenames(before: CorkboardRootConfig, after: CorkboardRootConfig): Promise<void> {
+    const beforeMap = this.buildCardPathMap(before);
+    const afterMap = this.buildCardPathMap(after);
+    const renames: Array<{ from: string; to: string }> = [];
+
+    for (const [id, fromPath] of beforeMap) {
+      const toPath = afterMap.get(id);
+      if (toPath && toPath !== fromPath) {
+        renames.push({ from: fromPath, to: toPath });
+      }
+    }
+
+    for (const rename of renames) {
+      await this.safeRenameFile(rename.from, rename.to);
+    }
+  }
+
+  private buildCardPathMap(config: CorkboardRootConfig): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const board of Object.values(config.boards)) {
+      for (const card of board.cards) {
+        map.set(card.id, card.filePath);
+      }
+    }
+    return map;
+  }
+
+  private async safeRenameFile(fromPath: string, toPath: string): Promise<void> {
+    if (fromPath === toPath) return;
+    const fromUri = vscode.Uri.file(path.join(this.workspaceRoot, fromPath));
+    const toUri = vscode.Uri.file(path.join(this.workspaceRoot, toPath));
+
+    try {
+      await vscode.workspace.fs.stat(fromUri);
+    } catch {
+      return;
+    }
+
+    try {
+      await vscode.workspace.fs.stat(toUri);
+      vscode.window.showWarningMessage(`ファイルの名前を元に戻せませんでした: ${toPath} が既に存在します。`);
+      return;
+    } catch {
+      // target does not exist
+    }
+
+    try {
+      await vscode.workspace.fs.rename(fromUri, toUri);
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      vscode.window.showWarningMessage(`ファイル名の復元に失敗しました: ${errorMsg}`);
     }
   }
 

@@ -24,6 +24,8 @@ import {
   sendAddLink,
   sendUpdateLink,
   sendRemoveLink,
+  sendUndo,
+  sendRedo,
 } from './messageHandler';
 
 let currentConfig: CorkboardConfig | null = null;
@@ -770,9 +772,39 @@ export function handleFileContents(contents: { filePath: string; content: string
 /** キーボードショートカットの設定 */
 function setupKeyboardShortcuts(): void {
   document.addEventListener('keydown', (e) => {
-    // テキスト入力中は無視
-    const active = document.activeElement;
-    if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+    const active = document.activeElement as HTMLElement | null;
+    const isTextInput = !!active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
+    const key = e.key.toLowerCase();
+
+    if (!isTextInput) {
+      if ((e.metaKey || e.ctrlKey) && key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          sendRedo();
+        } else {
+          sendUndo();
+        }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && key === 'y') {
+        e.preventDefault();
+        sendRedo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && key === 'n') {
+        e.preventDefault();
+        sendRequestNewCard();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && key === 'o') {
+        e.preventDefault();
+        requestFilePicker();
+        return;
+      }
+    }
+
+    // テキスト入力中はカード操作を無視
+    if (isTextInput) return;
 
     if (!currentConfig || !selectedCardId) return;
 
@@ -786,15 +818,18 @@ function setupKeyboardShortcuts(): void {
     switch (e.key) {
       case 'Delete':
       case 'Backspace':
-        if (e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-          removeCard(card, cardEl);
-          selectedCardId = null;
-        }
+        if (document.querySelector('.link-selected')) return;
+        e.preventDefault();
+        removeCard(card, cardEl);
+        selectedCardId = null;
         break;
       case 'Enter':
         e.preventDefault();
         openFile(card.filePath);
+        break;
+      case 'F2':
+        e.preventDefault();
+        editTitle(card, cardEl);
         break;
     }
   });
