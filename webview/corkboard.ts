@@ -351,6 +351,36 @@ function applyCardHeight(): void {
   container.style.setProperty('--card-min-height-freeform', `${preset.freeformMinHeight}px`);
 }
 
+function positionPopup(popup: HTMLElement, anchorRect: DOMRect): void {
+  const margin = 8;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  popup.style.position = 'fixed';
+  popup.style.visibility = 'hidden';
+  popup.style.left = `${anchorRect.right}px`;
+  popup.style.top = `${anchorRect.bottom}px`;
+  document.body.appendChild(popup);
+
+  const popupRect = popup.getBoundingClientRect();
+  let left = anchorRect.right;
+  let top = anchorRect.bottom;
+
+  if (left + popupRect.width > viewportWidth - margin) {
+    left = anchorRect.left - popupRect.width;
+  }
+  if (top + popupRect.height > viewportHeight - margin) {
+    top = anchorRect.top - popupRect.height;
+  }
+
+  left = Math.min(Math.max(left, margin), Math.max(margin, viewportWidth - popupRect.width - margin));
+  top = Math.min(Math.max(top, margin), Math.max(margin, viewportHeight - popupRect.height - margin));
+
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+  popup.style.visibility = 'visible';
+}
+
 /** カードのコンテキストメニューを表示 */
 function showCardMenu(card: CardData, cardEl: HTMLElement): void {
   // 既存メニューを削除
@@ -381,11 +411,7 @@ function showCardMenu(card: CardData, cardEl: HTMLElement): void {
 
   // 位置を計算
   const btnRect = cardEl.querySelector('.card-menu-btn')!.getBoundingClientRect();
-  menu.style.position = 'fixed';
-  menu.style.left = `${btnRect.right}px`;
-  menu.style.top = `${btnRect.bottom}px`;
-
-  document.body.appendChild(menu);
+  positionPopup(menu, btnRect);
 
   // メニュー外クリックで閉じる
   const closeMenu = (e: MouseEvent) => {
@@ -432,10 +458,7 @@ function showLabelPicker(card: CardData, cardEl: HTMLElement): void {
   });
 
   const btnRect = cardEl.querySelector('.card-menu-btn')!.getBoundingClientRect();
-  picker.style.position = 'fixed';
-  picker.style.left = `${btnRect.right}px`;
-  picker.style.top = `${btnRect.bottom}px`;
-  document.body.appendChild(picker);
+  positionPopup(picker, btnRect);
 
   setTimeout(() => {
     const close = (e: MouseEvent) => {
@@ -509,10 +532,7 @@ function showStatusPicker(card: CardData, cardEl: HTMLElement): void {
   });
 
   const btnRect = cardEl.querySelector('.card-menu-btn')!.getBoundingClientRect();
-  picker.style.position = 'fixed';
-  picker.style.left = `${btnRect.right}px`;
-  picker.style.top = `${btnRect.bottom}px`;
-  document.body.appendChild(picker);
+  positionPopup(picker, btnRect);
 
   setTimeout(() => {
     const close = (e: MouseEvent) => {
