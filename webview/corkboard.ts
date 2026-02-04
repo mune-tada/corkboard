@@ -204,6 +204,9 @@ function setupToolbar(): void {
       const mode = btn.dataset.mode as 'grid' | 'freeform' | 'text';
       if (currentConfig && currentConfig.viewMode !== mode) {
         currentConfig.viewMode = mode;
+        if (mode !== 'freeform') {
+          isConnectMode = false;
+        }
         sendSetViewMode(mode);
         if (mode === 'text' && getTextSubMode() === 'full') {
           sendRequestFileContents();
@@ -241,6 +244,13 @@ function setupToolbar(): void {
   document.getElementById('btn-commit')?.addEventListener('click', () => {
     const container = document.getElementById('corkboard-container')!;
     commitFreeformOrder(container);
+  });
+
+  // コネクトモードボタン
+  document.getElementById('btn-connect')?.addEventListener('click', () => {
+    isConnectMode = !isConnectMode;
+    setConnectMode(isConnectMode);
+    updateToolbarState();
   });
 
   // カラム数変更
@@ -288,6 +298,11 @@ function updateToolbarState(): void {
   // 順序確定ボタンの表示/非表示
   const commitBtn = document.getElementById('btn-commit')!;
   commitBtn.classList.toggle('hidden', currentConfig.viewMode !== 'freeform');
+
+  // コネクトボタンの表示/非表示
+  const connectBtn = document.getElementById('btn-connect')!;
+  connectBtn.classList.toggle('hidden', currentConfig.viewMode !== 'freeform');
+  connectBtn.classList.toggle('active', isConnectMode);
 
   // カラム数コントロールの表示/非表示
   const colsControl = document.getElementById('columns-control')!;
@@ -605,6 +620,7 @@ function removeCard(card: CardData, cardEl: HTMLElement): void {
 
   if (currentConfig) {
     currentConfig.cards = currentConfig.cards.filter(c => c.id !== card.id);
+    currentConfig.links = currentConfig.links.filter(l => l.fromId !== card.id && l.toId !== card.id);
     if (currentConfig.cards.length === 0) {
       document.getElementById('corkboard-container')!.classList.add('hidden');
       document.getElementById('empty-state')!.classList.remove('hidden');
@@ -613,7 +629,31 @@ function removeCard(card: CardData, cardEl: HTMLElement): void {
       const container = document.getElementById('corkboard-container')!;
       updateCardNumbers(container);
     }
+    renderLinks(currentConfig.links);
   }
+}
+
+function addLink(link: LinkData): void {
+  if (!currentConfig) return;
+  currentConfig.links.push(link);
+  sendAddLink(link);
+  renderLinks(currentConfig.links);
+}
+
+function updateLink(linkId: string, changes: Partial<LinkData>): void {
+  if (!currentConfig) return;
+  const link = currentConfig.links.find(l => l.id === linkId);
+  if (!link) return;
+  Object.assign(link, changes);
+  sendUpdateLink(linkId, changes);
+  renderLinks(currentConfig.links);
+}
+
+function removeLink(linkId: string): void {
+  if (!currentConfig) return;
+  currentConfig.links = currentConfig.links.filter(l => l.id !== linkId);
+  sendRemoveLink(linkId);
+  renderLinks(currentConfig.links);
 }
 
 /** ボードセレクタを更新 */
