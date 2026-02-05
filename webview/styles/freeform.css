@@ -1,9 +1,7 @@
 /* フリーフォームモード */
 
-#corkboard-container.freeform-mode {
+#corkboard-container.freeform-mode #corkboard-content {
   display: block;
-  min-height: 2000px;
-  min-width: 2000px;
   position: relative;
   --freeform-grid-size: 24px;
   /* コルクボード風の背景パターン */
@@ -12,14 +10,14 @@
   background-size: var(--freeform-grid-size) var(--freeform-grid-size);
 }
 
-#corkboard-container.freeform-mode .card {
+#corkboard-container.freeform-mode #corkboard-content .card {
   position: absolute;
   width: 220px;
   min-height: var(--card-min-height-freeform, 150px);
   will-change: transform;
 }
 
-#corkboard-container.freeform-mode .card.card-dragging {
+#corkboard-container.freeform-mode #corkboard-content .card.card-dragging {
   will-change: transform;
   pointer-events: none;
 }

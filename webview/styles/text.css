@@ -2,7 +2,6 @@
 
 .text-mode-container {
   padding: 16px 24px;
-  overflow-y: auto;
   width: 100%;
 }
 

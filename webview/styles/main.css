@@ -26,6 +26,36 @@ body {
   overflow: auto;
   padding: 16px;
   position: relative;
+  --freeform-zoom: 1;
+  --freeform-base-size: 2000px;
+}
+
+#corkboard-container.text-mode {
+  padding: 0;
+}
+
+#corkboard-surface {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+#corkboard-content {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+#corkboard-container.freeform-mode #corkboard-surface {
+  width: calc(var(--freeform-base-size) * var(--freeform-zoom));
+  height: calc(var(--freeform-base-size) * var(--freeform-zoom));
+}
+
+#corkboard-container.freeform-mode #corkboard-content {
+  width: var(--freeform-base-size);
+  height: var(--freeform-base-size);
+  transform: scale(var(--freeform-zoom));
+  transform-origin: top left;
 }
 
 #empty-state {

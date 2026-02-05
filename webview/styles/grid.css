@@ -1,6 +1,6 @@
 /* グリッドモード */
 
-#corkboard-container.grid-mode {
+#corkboard-container.grid-mode #corkboard-content {
   display: grid;
   grid-template-columns: repeat(var(--grid-columns, 4), 1fr);
   gap: 12px;

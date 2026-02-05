@@ -3,7 +3,8 @@ import { createCardElement, getSynopsisText, applyLabelColorVars, removeLabelCol
 import { initGridMode, destroyGridMode, updateCardNumbers } from './gridMode';
 import { initFreeformMode, destroyFreeformMode, commitFreeformOrder } from './freeformMode';
 import { renderTextMode, destroyTextMode, setFileContents, setTextSubMode, getTextSubMode } from './textMode';
-import { initConnectorLayer, renderLinks, setConnectMode, setConnectorVisible, clearLinkSelection } from './connectors';
+import { initConnectorLayer, renderLinks, setConnectMode, setConnectorVisible, clearLinkSelection, updateLinkColor } from './connectors';
+import { zoomIn, zoomOut, resetFreeformZoom } from './freeformZoom';
 import {
   openFile,
   requestFilePicker,
@@ -41,6 +42,14 @@ const cardHeightPresets = {
   large: { minHeight: 200, lineClamp: 8, freeformMinHeight: 220 },
 } as const;
 
+function getViewport(): HTMLElement {
+  return document.getElementById('corkboard-container')!;
+}
+
+function getContent(): HTMLElement {
+  return document.getElementById('corkboard-content')!;
+}
+
 /** コルクボードを初期化 */
 export function initCorkboard(): void {
   setupToolbar();
@@ -70,18 +79,19 @@ export function addCard(card: CardData, preview: FilePreview): void {
 
 /** 全カードを描画 */
 function renderCards(): void {
-  const container = document.getElementById('corkboard-container')!;
+  const viewport = getViewport();
+  const content = getContent();
   const emptyState = document.getElementById('empty-state')!;
 
   if (!currentConfig || currentConfig.cards.length === 0) {
-    container.innerHTML = '';
+    content.innerHTML = '';
     emptyState.classList.remove('hidden');
-    container.classList.add('hidden');
+    viewport.classList.add('hidden');
     return;
   }
 
   emptyState.classList.add('hidden');
-  container.classList.remove('hidden');
+  viewport.classList.remove('hidden');
 
   if (currentConfig.viewMode !== 'freeform') {
     isConnectMode = false;
@@ -91,16 +101,19 @@ function renderCards(): void {
 
   // 既存モードを破棄
   destroyGridMode();
-  destroyFreeformMode(container);
-  destroyTextMode(container);
+  destroyFreeformMode(viewport, content);
+  destroyTextMode(content);
   setConnectorVisible(false);
   setConnectMode(false);
 
-  container.innerHTML = '';
+  viewport.classList.remove('grid-mode', 'freeform-mode', 'freeform-dragging', 'connect-mode', 'reconnect-mode', 'text-mode');
+  content.className = '';
+  content.innerHTML = '';
 
   // テキストモードは別レンダリング
   if (currentConfig.viewMode === 'text') {
-    renderTextMode(container, currentConfig.cards, filePreviews);
+    viewport.classList.add('text-mode');
+    renderTextMode(content, currentConfig.cards, filePreviews);
     return;
   }
 
@@ -129,7 +142,7 @@ function renderCards(): void {
 
       clearLinkSelection();
       // 前の選択を解除
-      container.querySelectorAll('.card-selected').forEach(el => el.classList.remove('card-selected'));
+      content.querySelectorAll('.card-selected').forEach(el => el.classList.remove('card-selected'));
       cardEl.classList.add('card-selected');
       selectedCardId = card.id;
     });
@@ -152,15 +165,15 @@ function renderCards(): void {
       showCardMenu(card, cardEl);
     });
 
-    container.appendChild(cardEl);
+    content.appendChild(cardEl);
   });
 
   // モードに応じた初期化
   if (currentConfig.viewMode === 'grid') {
-    initGridMode(container);
+    initGridMode(viewport, content);
   } else {
-    initFreeformMode(container);
-    initConnectorLayer(container, {
+    initFreeformMode(viewport, content);
+    initConnectorLayer(viewport, content, {
       getLinks: () => currentConfig?.links ?? [],
       getLabelColors: () => currentConfig?.labelColors ?? [],
       onAddLink: addLink,
@@ -246,8 +259,8 @@ function setupToolbar(): void {
 
   // 順序確定ボタン
   document.getElementById('btn-commit')?.addEventListener('click', () => {
-    const container = document.getElementById('corkboard-container')!;
-    commitFreeformOrder(container);
+    const content = getContent();
+    commitFreeformOrder(content);
   });
 
   // コネクトモードボタン
@@ -339,20 +352,20 @@ function updateColumnsDisplay(): void {
 }
 
 function applyGridColumns(): void {
-  const container = document.getElementById('corkboard-container');
-  if (container && currentConfig) {
-    container.style.setProperty('--grid-columns', String(currentConfig.gridColumns));
+  const viewport = getViewport();
+  if (viewport && currentConfig) {
+    viewport.style.setProperty('--grid-columns', String(currentConfig.gridColumns));
   }
 }
 
 function applyCardHeight(): void {
-  const container = document.getElementById('corkboard-container');
-  if (!container || !currentConfig) return;
+  const viewport = getViewport();
+  if (!viewport || !currentConfig) return;
   const height = currentConfig.cardHeight ?? 'medium';
   const preset = cardHeightPresets[height] ?? cardHeightPresets.medium;
-  container.style.setProperty('--card-min-height', `${preset.minHeight}px`);
-  container.style.setProperty('--card-line-clamp', String(preset.lineClamp));
-  container.style.setProperty('--card-min-height-freeform', `${preset.freeformMinHeight}px`);
+  viewport.style.setProperty('--card-min-height', `${preset.minHeight}px`);
+  viewport.style.setProperty('--card-line-clamp', String(preset.lineClamp));
+  viewport.style.setProperty('--card-min-height-freeform', `${preset.freeformMinHeight}px`);
 }
 
 function positionPopup(popup: HTMLElement, anchorRect: DOMRect): void {
@@ -647,12 +660,12 @@ function removeCard(card: CardData, cardEl: HTMLElement): void {
     currentConfig.cards = currentConfig.cards.filter(c => c.id !== card.id);
     currentConfig.links = currentConfig.links.filter(l => l.fromId !== card.id && l.toId !== card.id);
     if (currentConfig.cards.length === 0) {
-      document.getElementById('corkboard-container')!.classList.add('hidden');
+      getViewport().classList.add('hidden');
       document.getElementById('empty-state')!.classList.remove('hidden');
     } else {
       // カード番号を更新
-      const container = document.getElementById('corkboard-container')!;
-      updateCardNumbers(container);
+      const content = getContent();
+      updateCardNumbers(content);
     }
     renderLinks(currentConfig.links);
   }
@@ -671,6 +684,11 @@ function updateLink(linkId: string, changes: Partial<LinkData>): void {
   if (!link) return;
   Object.assign(link, changes);
   sendUpdateLink(linkId, changes);
+  const keys = Object.keys(changes);
+  if (keys.length === 1 && keys[0] === 'color') {
+    updateLinkColor(linkId, link.color ?? null);
+    return;
+  }
   renderLinks(currentConfig.links);
 }
 
@@ -705,8 +723,8 @@ export function handleFileChanged(filePath: string, preview: FilePreview): void 
 
   // カード概要がユーザー設定でない場合のみ更新
   if (!card.synopsis) {
-    const container = document.getElementById('corkboard-container')!;
-    const cardEl = container.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
+    const content = getContent();
+    const cardEl = content.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
     if (cardEl) {
       const synopsisEl = cardEl.querySelector('.card-synopsis');
       if (synopsisEl) {
@@ -722,8 +740,8 @@ export function handleFileDeleted(filePath: string): void {
   const card = currentConfig.cards.find(c => c.filePath === filePath);
   if (!card) return;
 
-  const container = document.getElementById('corkboard-container')!;
-  const cardEl = container.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
+  const content = getContent();
+  const cardEl = content.querySelector<HTMLElement>(`[data-id="${card.id}"]`);
   if (cardEl) {
     cardEl.classList.add('card-file-deleted');
     const synopsis = cardEl.querySelector('.card-synopsis');
@@ -750,8 +768,8 @@ export function handleFileRenamed(cardId: string, oldPath: string, newPath: stri
   card.filePath = newPath;
 
   // DOM更新
-  const container = document.getElementById('corkboard-container')!;
-  const cardEl = container.querySelector<HTMLElement>(`[data-id="${cardId}"]`);
+  const content = getContent();
+  const cardEl = content.querySelector<HTMLElement>(`[data-id="${cardId}"]`);
   if (cardEl) {
     const titleEl = cardEl.querySelector('.card-title');
     if (titleEl) {
@@ -766,7 +784,7 @@ export function handleFileRenamed(cardId: string, oldPath: string, newPath: stri
 export function handleFileRelinked(updates: FileRelinkUpdate[]): void {
   if (!currentConfig) return;
 
-  const container = document.getElementById('corkboard-container')!;
+  const content = getContent();
 
   updates.forEach(update => {
     const card = currentConfig!.cards.find(c => c.id === update.cardId);
@@ -785,7 +803,7 @@ export function handleFileRelinked(updates: FileRelinkUpdate[]): void {
     card.filePath = newPath;
 
     // DOM更新
-    const cardEl = container.querySelector<HTMLElement>(`[data-id="${update.cardId}"]`);
+    const cardEl = content.querySelector<HTMLElement>(`[data-id="${update.cardId}"]`);
     if (cardEl) {
       cardEl.classList.remove('card-file-deleted');
       const titleEl = cardEl.querySelector('.card-title');
@@ -804,7 +822,7 @@ export function handleFileRelinked(updates: FileRelinkUpdate[]): void {
   });
 
   if (currentConfig.viewMode === 'text') {
-    renderTextMode(container, currentConfig.cards, filePreviews);
+    renderTextMode(content, currentConfig.cards, filePreviews);
   }
 }
 
@@ -813,8 +831,8 @@ export function handleFileContents(contents: { filePath: string; content: string
   setFileContents(contents);
   // テキストモード表示中なら再描画
   if (currentConfig?.viewMode === 'text') {
-    const container = document.getElementById('corkboard-container')!;
-    renderTextMode(container, currentConfig.cards, filePreviews);
+    const content = getContent();
+    renderTextMode(content, currentConfig.cards, filePreviews);
   }
 }
 
@@ -824,6 +842,24 @@ function setupKeyboardShortcuts(): void {
     const active = document.activeElement as HTMLElement | null;
     const isTextInput = !!active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
     const key = e.key.toLowerCase();
+
+    if (currentConfig?.viewMode === 'freeform' && (e.metaKey || e.ctrlKey) && !e.altKey) {
+      if (key === '=' || key === '+') {
+        e.preventDefault();
+        zoomIn();
+        return;
+      }
+      if (key === '-' || key === '_') {
+        e.preventDefault();
+        zoomOut();
+        return;
+      }
+      if (key === '0') {
+        e.preventDefault();
+        resetFreeformZoom();
+        return;
+      }
+    }
 
     if (!isTextInput) {
       if ((e.metaKey || e.ctrlKey) && key === 'z') {
@@ -860,8 +896,8 @@ function setupKeyboardShortcuts(): void {
     const card = currentConfig.cards.find(c => c.id === selectedCardId);
     if (!card) return;
 
-    const container = document.getElementById('corkboard-container')!;
-    const cardEl = container.querySelector<HTMLElement>(`[data-id="${selectedCardId}"]`);
+    const content = getContent();
+    const cardEl = content.querySelector<HTMLElement>(`[data-id="${selectedCardId}"]`);
     if (!cardEl) return;
 
     switch (e.key) {

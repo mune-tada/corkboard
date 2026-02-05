@@ -1,5 +1,6 @@
 import { sendMoveCard, sendCommitFreeformOrder } from './messageHandler';
 import { updateLinkPositions } from './connectors';
+import { initFreeformZoom, destroyFreeformZoom, getFreeformZoom } from './freeformZoom';
 
 let isDragging = false;
 let dragTarget: HTMLElement | null = null;
@@ -34,16 +35,21 @@ let scrollHandler: (() => void) | null = null;
 let dragStarted = false;
 let dragStartClientX = 0;
 let dragStartClientY = 0;
+let dragZoom = 1;
+let freeformViewport: HTMLElement | null = null;
+let freeformContent: HTMLElement | null = null;
 
 /** フリーフォームモードを初期化 */
-export function initFreeformMode(container: HTMLElement): void {
-  container.classList.remove('grid-mode');
-  container.classList.add('freeform-mode');
+export function initFreeformMode(viewport: HTMLElement, content: HTMLElement): void {
+  freeformViewport = viewport;
+  freeformContent = content;
+  viewport.classList.remove('grid-mode');
+  viewport.classList.add('freeform-mode');
 
   // カードに初期位置を設定（位置がない場合はグリッド風に配置）
-  const cards = container.querySelectorAll<HTMLElement>('.card');
+  const cards = content.querySelectorAll<HTMLElement>('.card');
   const cardWidth = 220;
-  const minHeightValue = parseFloat(getComputedStyle(container).getPropertyValue('--card-min-height-freeform'));
+  const minHeightValue = parseFloat(getComputedStyle(viewport).getPropertyValue('--card-min-height-freeform'));
   const cardHeight = Number.isFinite(minHeightValue) && minHeightValue > 0 ? minHeightValue : 150;
   const gap = 16;
   const cols = 4;
@@ -75,12 +81,14 @@ export function initFreeformMode(container: HTMLElement): void {
   highestZ = 100 + cards.length;
 
   // mousedownイベント（カードヘッダーのみ）
-  container.addEventListener('mousedown', onMouseDown);
+  content.addEventListener('mousedown', onMouseDown);
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseup', onMouseUp);
+  initFreeformZoom(viewport, content, { onZoom: () => updateLinkPositions() });
 }
 
 function onMouseDown(e: MouseEvent): void {
+  if (!freeformViewport || !freeformContent) return;
   const target = e.target as HTMLElement;
   if (target.closest('.card-connect-handle')) return;
   if (target.closest('button, input, textarea, select')) return;
@@ -91,14 +99,15 @@ function onMouseDown(e: MouseEvent): void {
   const card = header.closest<HTMLElement>('.card');
   if (!card) return;
 
-  const container = card.parentElement;
-  if (!container) return;
+  const container = freeformViewport;
+  const content = freeformContent;
 
   e.preventDefault();
   isDragging = true;
   dragStarted = false;
   dragTarget = card;
   dragContainer = container;
+  dragZoom = getFreeformZoom();
   dragStartClientX = e.clientX;
   dragStartClientY = e.clientY;
 
@@ -118,12 +127,12 @@ function onMouseDown(e: MouseEvent): void {
   currentY = startTop;
 
   const rect = card.getBoundingClientRect();
-  dragWidth = rect.width;
-  dragHeight = rect.height;
-  dragOffsetX = e.clientX - rect.left;
-  dragOffsetY = e.clientY - rect.top;
+  dragWidth = rect.width / dragZoom;
+  dragHeight = rect.height / dragZoom;
+  dragOffsetX = (e.clientX - rect.left) / dragZoom;
+  dragOffsetY = (e.clientY - rect.top) / dragZoom;
 
-  const snapTargets = collectSnapTargets(container, card);
+  const snapTargets = collectSnapTargets(content, card);
   snapTargetsX = snapTargets.x;
   snapTargetsY = snapTargets.y;
 
@@ -152,8 +161,8 @@ function onMouseMove(e: MouseEvent): void {
     dragContainer?.classList.add('freeform-dragging');
   }
 
-  const x = e.clientX - cachedContainerRect.left - dragOffsetX + cachedScrollLeft;
-  const y = e.clientY - cachedContainerRect.top - dragOffsetY + cachedScrollTop;
+  const x = (e.clientX - cachedContainerRect.left + cachedScrollLeft) / dragZoom - dragOffsetX;
+  const y = (e.clientY - cachedContainerRect.top + cachedScrollTop) / dragZoom - dragOffsetY;
 
   rawX = Math.max(0, x);
   rawY = Math.max(0, y);
@@ -228,8 +237,8 @@ function onMouseUp(_e: MouseEvent): void {
 }
 
 /** フリーフォームモードを破棄 */
-export function destroyFreeformMode(container: HTMLElement): void {
-  container.removeEventListener('mousedown', onMouseDown);
+export function destroyFreeformMode(viewport: HTMLElement, content: HTMLElement): void {
+  content.removeEventListener('mousedown', onMouseDown);
   document.removeEventListener('mousemove', onMouseMove);
   document.removeEventListener('mouseup', onMouseUp);
 
@@ -241,7 +250,8 @@ export function destroyFreeformMode(container: HTMLElement): void {
   if (dragContainer && scrollHandler) {
     dragContainer.removeEventListener('scroll', scrollHandler);
   }
-  container.classList.remove('freeform-dragging');
+  viewport.classList.remove('freeform-dragging');
+  viewport.classList.remove('freeform-mode');
   isDragging = false;
   dragStarted = false;
   dragTarget = null;
@@ -250,6 +260,10 @@ export function destroyFreeformMode(container: HTMLElement): void {
   snapTargetsX = [];
   snapTargetsY = [];
   scrollHandler = null;
+  dragZoom = 1;
+  freeformViewport = null;
+  freeformContent = null;
+  destroyFreeformZoom();
 }
 
 function collectSnapTargets(container: HTMLElement, exclude: HTMLElement): { x: number[]; y: number[] } {

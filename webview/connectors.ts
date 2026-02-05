@@ -1,4 +1,5 @@
 import { LabelDefinition, LinkAnchor, LinkData } from './types';
+import { getFreeformZoom } from './freeformZoom';
 
 type LinkHooks = {
   getLinks: () => LinkData[];
@@ -19,6 +20,7 @@ const RECONNECT_HIT_RADIUS = 14;
 
 let hooks: LinkHooks | null = null;
 let containerEl: HTMLElement | null = null;
+let viewportEl: HTMLElement | null = null;
 let svgEl: SVGSVGElement | null = null;
 let linkGroup: SVGGElement | null = null;
 let tempPath: SVGPathElement | null = null;
@@ -40,8 +42,9 @@ let editingLinkId: string | null = null;
 let attachDone = false;
 let linkContextMenu: HTMLElement | null = null;
 
-export function initConnectorLayer(container: HTMLElement, linkHooks: LinkHooks): void {
-  containerEl = container;
+export function initConnectorLayer(viewport: HTMLElement, content: HTMLElement, linkHooks: LinkHooks): void {
+  viewportEl = viewport;
+  containerEl = content;
   hooks = linkHooks;
   ensureSvgLayer();
   attachContainerListeners();
@@ -67,8 +70,8 @@ export function setConnectorVisible(visible: boolean): void {
 
 export function setConnectMode(isOn: boolean): void {
   connectMode = isOn;
-  if (containerEl) {
-    containerEl.classList.toggle('connect-mode', isOn);
+  if (viewportEl) {
+    viewportEl.classList.toggle('connect-mode', isOn);
   }
   if (!isOn) {
     cancelConnecting();
@@ -157,8 +160,7 @@ export function updateLinkPositions(): void {
   if (!containerEl || !linkGroup) return;
   updateSvgSize();
   const containerRect = containerEl.getBoundingClientRect();
-  const scrollLeft = containerEl.scrollLeft;
-  const scrollTop = containerEl.scrollTop;
+  const zoom = getFreeformZoom();
 
   for (const link of currentLinks) {
     const elements = linkElementMap.get(link.id);
@@ -175,8 +177,8 @@ export function updateLinkPositions(): void {
     const fromRect = fromCard.getBoundingClientRect();
     const toRect = toCard.getBoundingClientRect();
 
-    const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
-    const toBox = rectToBox(toRect, containerRect, scrollLeft, scrollTop);
+    const fromBox = rectToBox(fromRect, containerRect, zoom);
+    const toBox = rectToBox(toRect, containerRect, zoom);
     const autoAnchors = pickAnchors(fromBox, toBox);
     const from = link.fromAnchor ? getAnchorPoint(fromBox, link.fromAnchor) : autoAnchors.from;
     const to = link.toAnchor ? getAnchorPoint(toBox, link.toAnchor) : autoAnchors.to;
@@ -209,6 +211,12 @@ export function updateLinkPositions(): void {
   }
 }
 
+export function updateLinkColor(linkId: string, color: string | null): void {
+  const elements = linkElementMap.get(linkId);
+  if (!elements) return;
+  applyLinkColorStyles(elements.path, elements.labelDiv, color);
+}
+
 function maybeStartReconnectFromPath(linkId: string, e: MouseEvent): boolean {
   if (!containerEl) return false;
   if (e.button !== 0) return false;
@@ -218,9 +226,9 @@ function maybeStartReconnectFromPath(linkId: string, e: MouseEvent): boolean {
   const endpoints = getLinkEndpoints(link);
   if (!endpoints) return false;
 
-  const containerRect = containerEl.getBoundingClientRect();
-  const x = e.clientX - containerRect.left + containerEl.scrollLeft;
-  const y = e.clientY - containerRect.top + containerEl.scrollTop;
+  const point = clientToContentPoint(e.clientX, e.clientY);
+  const x = point.x;
+  const y = point.y;
   const distFrom = Math.hypot(x - endpoints.from.x, y - endpoints.from.y);
   const distTo = Math.hypot(x - endpoints.to.x, y - endpoints.to.y);
 
@@ -241,12 +249,11 @@ function getLinkEndpoints(link: LinkData): { from: { x: number; y: number }; to:
   if (!fromCard || !toCard) return null;
 
   const containerRect = containerEl.getBoundingClientRect();
-  const scrollLeft = containerEl.scrollLeft;
-  const scrollTop = containerEl.scrollTop;
+  const zoom = getFreeformZoom();
   const fromRect = fromCard.getBoundingClientRect();
   const toRect = toCard.getBoundingClientRect();
-  const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
-  const toBox = rectToBox(toRect, containerRect, scrollLeft, scrollTop);
+  const fromBox = rectToBox(fromRect, containerRect, zoom);
+  const toBox = rectToBox(toRect, containerRect, zoom);
   const autoAnchors = pickAnchors(fromBox, toBox);
   const from = link.fromAnchor ? getAnchorPoint(fromBox, link.fromAnchor) : autoAnchors.from;
   const to = link.toAnchor ? getAnchorPoint(toBox, link.toAnchor) : autoAnchors.to;
@@ -364,12 +371,8 @@ function onConnectMouseUp(e: MouseEvent): void {
 function updateTempPath(clientX: number, clientY: number): void {
   if (!containerEl || !tempPath) return;
   const containerRect = containerEl.getBoundingClientRect();
-  const scrollLeft = containerEl.scrollLeft;
-  const scrollTop = containerEl.scrollTop;
-  const toPoint = {
-    x: clientX - containerRect.left + scrollLeft,
-    y: clientY - containerRect.top + scrollTop,
-  };
+  const zoom = getFreeformZoom();
+  const toPoint = clientToContentPoint(clientX, clientY);
   const pointBox = {
     left: toPoint.x,
     right: toPoint.x,
@@ -385,7 +388,7 @@ function updateTempPath(clientX: number, clientY: number): void {
     const fixedCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${reconnectFixedId}"]`);
     if (!fixedCard) return;
     const fixedRect = fixedCard.getBoundingClientRect();
-    const fixedBox = rectToBox(fixedRect, containerRect, scrollLeft, scrollTop);
+    const fixedBox = rectToBox(fixedRect, containerRect, zoom);
     if (reconnectFixedAnchor) {
       fromPoint = getAnchorPoint(fixedBox, reconnectFixedAnchor);
     } else {
@@ -401,7 +404,7 @@ function updateTempPath(clientX: number, clientY: number): void {
     const fromCard = containerEl.querySelector<HTMLElement>(`.card[data-id="${connectFromId}"]`);
     if (!fromCard) return;
     const fromRect = fromCard.getBoundingClientRect();
-    const fromBox = rectToBox(fromRect, containerRect, scrollLeft, scrollTop);
+    const fromBox = rectToBox(fromRect, containerRect, zoom);
     if (connectFromAnchor) {
       fromPoint = getAnchorPoint(fromBox, connectFromAnchor);
     } else {
@@ -466,8 +469,8 @@ function ensureTempPath(): void {
 }
 
 function setReconnectMode(isOn: boolean): void {
-  if (containerEl) {
-    containerEl.classList.toggle('reconnect-mode', isOn);
+  if (viewportEl) {
+    viewportEl.classList.toggle('reconnect-mode', isOn);
   }
 }
 
@@ -759,15 +762,16 @@ function getHandleAnchor(handle: HTMLElement): LinkAnchor | null {
 function rectToBox(
   rect: DOMRect,
   containerRect: DOMRect,
-  scrollLeft: number,
-  scrollTop: number
+  zoom: number
 ): { left: number; right: number; top: number; bottom: number; cx: number; cy: number } {
-  const left = rect.left - containerRect.left + scrollLeft;
-  const top = rect.top - containerRect.top + scrollTop;
-  const right = left + rect.width;
-  const bottom = top + rect.height;
-  const cx = left + rect.width / 2;
-  const cy = top + rect.height / 2;
+  const left = (rect.left - containerRect.left) / zoom;
+  const top = (rect.top - containerRect.top) / zoom;
+  const width = rect.width / zoom;
+  const height = rect.height / zoom;
+  const right = left + width;
+  const bottom = top + height;
+  const cx = left + width / 2;
+  const cy = top + height / 2;
   return { left, right, top, bottom, cx, cy };
 }
 
@@ -852,4 +856,14 @@ function updateSvgSize(): void {
   const height = Math.max(containerEl.scrollHeight, containerEl.clientHeight);
   svgEl.setAttribute('width', String(width));
   svgEl.setAttribute('height', String(height));
+}
+
+function clientToContentPoint(clientX: number, clientY: number): { x: number; y: number } {
+  if (!containerEl) return { x: 0, y: 0 };
+  const rect = containerEl.getBoundingClientRect();
+  const zoom = getFreeformZoom();
+  return {
+    x: (clientX - rect.left) / zoom,
+    y: (clientY - rect.top) / zoom,
+  };
 }

@@ -4,14 +4,14 @@ import { sendReorderCards } from './messageHandler';
 let sortableInstance: Sortable | null = null;
 
 /** グリッドモードを初期化 */
-export function initGridMode(container: HTMLElement): void {
+export function initGridMode(viewport: HTMLElement, content: HTMLElement): void {
   destroyGridMode();
 
-  container.classList.add('grid-mode');
-  container.classList.remove('freeform-mode');
+  viewport.classList.add('grid-mode');
+  viewport.classList.remove('freeform-mode');
 
   // カードの絶対位置をクリア
-  const cards = container.querySelectorAll<HTMLElement>('.card');
+  const cards = content.querySelectorAll<HTMLElement>('.card');
   cards.forEach(card => {
     card.style.position = '';
     card.style.left = '';
@@ -19,7 +19,7 @@ export function initGridMode(container: HTMLElement): void {
     card.style.zIndex = '';
   });
 
-  sortableInstance = Sortable.create(container, {
+  sortableInstance = Sortable.create(content, {
     animation: 200,
     ghostClass: 'card-ghost',
     chosenClass: 'card-chosen',
@@ -27,7 +27,7 @@ export function initGridMode(container: HTMLElement): void {
     handle: '.card-header',
     onEnd: () => {
       const cardIds: string[] = [];
-      container.querySelectorAll<HTMLElement>('.card').forEach(el => {
+      content.querySelectorAll<HTMLElement>('.card').forEach(el => {
         if (el.dataset.id) {
           cardIds.push(el.dataset.id);
         }
@@ -35,7 +35,7 @@ export function initGridMode(container: HTMLElement): void {
       sendReorderCards(cardIds);
 
       // カード番号を更新
-      updateCardNumbers(container);
+      updateCardNumbers(content);
     },
   });
 }

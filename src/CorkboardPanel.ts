@@ -727,7 +727,11 @@ export class CorkboardPanel {
       </div>
     </div>
   </div>
-  <div id="corkboard-container"></div>
+  <div id="corkboard-container">
+    <div id="corkboard-surface">
+      <div id="corkboard-content"></div>
+    </div>
+  </div>
   <div id="empty-state" class="hidden">
     <p>カードがありません</p>
     <p>「＋ ファイルを追加」または「＋ 新規カード」でカードを追加できます</p>
